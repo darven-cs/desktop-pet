@@ -112,15 +112,48 @@ pub fn is_known_animation(id: &str) -> bool {
     }
 }
 
+/// Check whether a directory contains at least one *_sheet.png file.
+fn has_sprites(dir: &Path) -> bool {
+    match fs::read_dir(dir) {
+        Ok(entries) => entries.flatten().any(|e| {
+            e.file_name()
+                .to_str()
+                .map(|n| n.ends_with("_sheet.png"))
+                .unwrap_or(false)
+        }),
+        Err(_) => false,
+    }
+}
+
+/// Recursively search for a directory containing *_sheet.png files.
+fn find_sprites_recursive(root: &Path, max_depth: u32) -> Option<PathBuf> {
+    if max_depth == 0 {
+        return None;
+    }
+    if has_sprites(root) {
+        return Some(root.to_path_buf());
+    }
+    if let Ok(entries) = fs::read_dir(root) {
+        for entry in entries.flatten() {
+            if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                if let Some(found) = find_sprites_recursive(&entry.path(), max_depth - 1) {
+                    return Some(found);
+                }
+            }
+        }
+    }
+    None
+}
+
 pub fn locate_sprites_dir() -> PathBuf {
     // Try common dev locations first.
-    let candidates = [
+    let dev_candidates = [
         PathBuf::from("public/sprites"),
         PathBuf::from("../public/sprites"),
         PathBuf::from("../../public/sprites"),
     ];
-    for c in &candidates {
-        if c.exists() {
+    for c in &dev_candidates {
+        if has_sprites(c) {
             return c.clone();
         }
     }
@@ -130,20 +163,26 @@ pub fn locate_sprites_dir() -> PathBuf {
             let exe_candidates = [
                 exe_dir.join("public/sprites"),
                 exe_dir.join("sprites"),
-                // Linux .deb / AppImage
-                exe_dir.join("../lib/desktop-pet"),
+                // Linux .deb / AppImage — Tauri v2 converts .. to _up_ in resource paths
+                exe_dir.join("../lib/desktop-pet/_up_/public/sprites"),
                 exe_dir.join("../lib/desktop-pet/public/sprites"),
                 exe_dir.join("../lib/desktop-pet/sprites"),
                 exe_dir.join("../share/desktop-pet/sprites"),
                 // macOS .app bundle
-                exe_dir.join("../Resources"),
-                exe_dir.join("../Resources/public/sprites"),
                 exe_dir.join("../Resources/sprites"),
+                exe_dir.join("../Resources/public/sprites"),
+                exe_dir.join("../Resources"),
             ];
             for c in &exe_candidates {
-                if c.exists() {
+                if has_sprites(c) {
                     return c.clone();
                 }
+            }
+            // Fallback: recursive search from the resource dir root (handles any
+            // directory nesting Tauri v2 may introduce, e.g. _up_ segments).
+            let resource_root = exe_dir.join("../lib/desktop-pet");
+            if let Some(found) = find_sprites_recursive(&resource_root, 5) {
+                return found;
             }
         }
     }
@@ -151,7 +190,7 @@ pub fn locate_sprites_dir() -> PathBuf {
     if let Ok(cwd) = std::env::current_dir() {
         for ancestor in cwd.ancestors() {
             let candidate = ancestor.join("public").join("sprites");
-            if candidate.exists() {
+            if has_sprites(&candidate) {
                 return candidate;
             }
         }

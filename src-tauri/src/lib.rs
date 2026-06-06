@@ -51,6 +51,7 @@ fn greet(name: &str) -> String {
 fn list_animations() -> Result<Vec<types::AnimationEntry>, AppError> {
     eprintln!("[PetCmd] list_animations called with: ()");
     let sprites_dir = registry::locate_sprites_dir();
+    eprintln!("[PetCmd] list_animations using sprites dir: {}", sprites_dir.display());
     match registry::list_animations(&sprites_dir) {
         Ok(v) => {
             eprintln!("[PetCmd] list_animations returned {} entries", v.len());

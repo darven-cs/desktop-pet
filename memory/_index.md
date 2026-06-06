@@ -13,6 +13,9 @@
 <!-- INDEX:MODULES:START -->
 | 模块 | 路径 | 状态 | 最后更新 | 一句话 |
 |---|---|---|---|---|
+| 窗口配置 | [modules/project_window_setup.md](modules/project_window_setup.md) | 已上线 | 2026-06-06 | 透明无边框置顶窗口的 Tauri 5 个 flag + 3 处 CSS |
+| 精灵图管线 | [modules/project_sprite_pipeline.md](modules/project_sprite_pipeline.md) | 已上线 | 2026-06-06 | GIF → sprite sheet 的目录约定、命名映射、CSS steps 播放 |
+| 窗口拖拽 | [modules/project_window_drag.md](modules/project_window_drag.md) | 已上线 | 2026-06-06 | 鼠标左键按住拖动整个 Tauri 窗口 |
 <!-- INDEX:MODULES:END -->
 
 ### 1.2 参考类记忆
@@ -29,6 +32,7 @@
 <!-- INDEX:BUGS:START -->
 | 坑 | 路径 | 触发条件 | 一句话规则 |
 |---|---|---|---|
+| cargo 国内 SSL | [bugs/bug_cargo_crates_io_ssl.md](bugs/bug_cargo_crates_io_ssl.md) | 国内网络首次 cargo build | `~/.cargo/config.toml` 用 sparse+https://rsproxy.cn/index/ |
 <!-- INDEX:BUGS:END -->
 
 ---

@@ -124,6 +124,29 @@ pub fn locate_sprites_dir() -> PathBuf {
             return c.clone();
         }
     }
+    // Production: search relative to the executable.
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(exe_dir) = exe.parent() {
+            let exe_candidates = [
+                exe_dir.join("public/sprites"),
+                exe_dir.join("sprites"),
+                // Linux .deb / AppImage
+                exe_dir.join("../lib/desktop-pet"),
+                exe_dir.join("../lib/desktop-pet/public/sprites"),
+                exe_dir.join("../lib/desktop-pet/sprites"),
+                exe_dir.join("../share/desktop-pet/sprites"),
+                // macOS .app bundle
+                exe_dir.join("../Resources"),
+                exe_dir.join("../Resources/public/sprites"),
+                exe_dir.join("../Resources/sprites"),
+            ];
+            for c in &exe_candidates {
+                if c.exists() {
+                    return c.clone();
+                }
+            }
+        }
+    }
     // Last resort: walk up from cwd.
     if let Ok(cwd) = std::env::current_dir() {
         for ancestor in cwd.ancestors() {

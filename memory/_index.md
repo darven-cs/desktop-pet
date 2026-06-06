@@ -42,6 +42,7 @@
 |---|---|---|---|
 | cargo 国内 SSL | [bugs/bug_cargo_crates_io_ssl.md](bugs/bug_cargo_crates_io_ssl.md) | 国内网络首次 cargo build | `~/.cargo/config.toml` 用 sparse+https://rsproxy.cn/index/ |
 | UTF-8 切片 panic | [bugs/bug_rust_utf8_slice_panic.md](bugs/bug_rust_utf8_slice_panic.md) | 硬编码字节索引切中文前缀/日志截断 | 用 `strip_prefix()` 和 `chars().take()` 代替字节索引 |
+| 生产环境 sprites 找不到 | [bugs/bug_production_sprites_path.md](bugs/bug_production_sprites_path.md) | .deb 安装后从任意目录运行 | `locate_sprites_dir()` 加 exe-relative 搜索 + `bundle.resources` |
 <!-- INDEX:BUGS:END -->
 
 ---

@@ -55,11 +55,21 @@ type: project
 
 ## 三、尺寸约定
 
-窗口尺寸 = 动画单帧尺寸。当前 240x240（与 `touch_nose_sheet.png` 一致）。后续若加新动画，**单帧尺寸不同就要改窗口尺寸**。
+窗口尺寸 = 当前动画单帧尺寸（**运行时动态**）。`tauri.conf.json` 的 240x240 是初始默认（touch_nose）。切动画时 `useAnimationStateMachine` watcher 调 `getCurrentWindow().setSize(new LogicalSize(w, h))` 同步改窗口。
+
+| 动画 | 单帧 | 初始 |
+|---|---|---|
+| touch_nose | 240x240 | 默认 |
+| think | 155x155 | 切后 |
+| poop | 155x155 | 切后 |
+
+`capabilities/default.json` 需 `core:window:allow-set-size`（已有）。
 
 ## 四、相关记忆
 
 - [精灵图管线](project_sprite_pipeline.md) — 单帧尺寸的来源
+- [Rust 数据类型](project_rust_types.md) — AnimationEntry.frameWidth/Height
+- [前端组合式](project_frontend_composables.md) — setSize 触发位置
 - [Cargo 镜像坑](bug_cargo_crates_io_ssl.md) — 启动前必读
 
 ---
@@ -67,3 +77,4 @@ type: project
 ## 变更历史
 
 - 2026-06-06：建模块。窗口 240x240，启用 transparent/decorations/alwaysOnTop/skipTaskbar
+- 2026-06-06：窗口尺寸改运行时动态 — setSize(new LogicalSize) 同步切动画时调

@@ -32,11 +32,11 @@ type: project
 | 编号 | 主题 | 依赖 | 核心新增 |
 |---|---|---|---|
 | **01** | 交互层（多动画+右键菜单+状态机+Rust IPC+窗口自适应） | — | 状态机接口、ticker、决策钩子 |
-| 02 | LLM 状态决策 | 01 | 把 01 的决策钩子从 hardcoded 换成 LLM 调用；定时器驱动 |
+| 02 | LLM 状态决策 | 01 | ✅ spec DRAFT 2026-06-07，代码已实现（Rust llm 模块 + 右键菜单重构 + overlay 面板），待验收 |
 | 03 | 桌面感知（截屏+窗口/选区） | 01 | 截屏 command、OS 级事件监听（macOS Accessibility / Windows UI Automation） |
 | 04 | 文字选区操作 | 03 | 选区检测 + 弹操作菜单（翻译/解释/搜索） |
-| 05 | 对话问答（输入+流式输出+动作反馈） | 02 | 输入 UI、LLM 流式响应、动作绑定到 LLM 决策 |
-| 06 | 长期记忆 | 01/05 | 持久化（sqlite?）、向量检索、注入 prompt |
+| 05 | 对话问答（输入+流式输出+动作反馈） | 02 | ✅ spec DRAFT 2026-06-07，代码已实现（chat.rs + PetChatPanel + usePetChat + 左右键入口），待验收 |
+| 06 | 长期记忆 | 01/05 | ✅ spec DRAFT 2026-06-07，代码已实现（5 层记忆架构：Event Stream → STM ring buffer → Digestion 消化 → LTM JSON 持久化 → Retrieval 检索注入），待验收 |
 
 ---
 
@@ -72,3 +72,6 @@ type: project
 ## 变更历史
 
 - 2026-06-06：建模块。用户主动分享终态 → 整理为 6 个 spec 路线图
+- 2026-06-06：01 spec 从 FROZEN → TESTING（实现完成，等用户跑 dev 验 AC 后进 DONE）
+- 2026-06-07：02 spec DRAFT，代码已实现（LLM 后端 + 右键菜单重构 + overlay 面板）
+- 2026-06-07：05/06 DRAFT，代码已实现（对话系统 + 5 层记忆架构）

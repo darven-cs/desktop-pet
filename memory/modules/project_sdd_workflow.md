@@ -73,3 +73,4 @@ type: project
 ## 变更历史
 
 - 2026-06-06：建模块。固化 SDD 5+1 步流程为 `sdd` skill + 状态机 + 硬拦截
+- 2026-06-06：01 spec 走完 DRAFT → REVIEW → FROZEN → IMPLEMENTING → TESTING（首跑流程）

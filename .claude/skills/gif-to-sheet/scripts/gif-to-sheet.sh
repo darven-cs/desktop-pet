@@ -70,14 +70,14 @@ fi
 echo "尺寸: ${WIDTH}x${HEIGHT}"
 
 # 分解帧
-ffmpeg -y -i "$INPUT" "$TEMP_DIR/frame_%04d.png" 2>/dev/null
+ffmpeg -y -vsync 0 -i "$INPUT" "$TEMP_DIR/frame_%04d.png" 2>/dev/null
 
 # 统计帧数
 FRAME_COUNT=$(ls "$TEMP_DIR"/frame_*.png | wc -l)
 echo "帧数: $FRAME_COUNT"
 
 # 拼接为 sprite sheet
-ffmpeg -y -i "$INPUT" -filter_complex "tile=${FRAME_COUNT}x1" \
+ffmpeg -y -i "$TEMP_DIR/frame_%04d.png" -filter_complex "tile=${FRAME_COUNT}x1" \
   -frames:v 1 -update 1 "$OUTPUT" 2>/dev/null
 
 SHEET_WIDTH=$((FRAME_COUNT * WIDTH))

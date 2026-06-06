@@ -14,10 +14,16 @@
 | 模块 | 路径 | 状态 | 最后更新 | 一句话 |
 |---|---|---|---|---|
 | SDD 工作流 | [modules/project_sdd_workflow.md](modules/project_sdd_workflow.md) | 已上线 | 2026-06-06 | 所有新功能必须走 Spec 先行 → 评审冻结 → 实现 → 验收，对应 sdd skill |
-| AI 桌宠长期目标 | [modules/project_ai_pet_vision.md](modules/project_ai_pet_vision.md) | 路线图 | 2026-06-06 | LLM 决策+桌面感知+文字选区+对话+记忆；6 个 spec 路线图 |
-| 窗口配置 | [modules/project_window_setup.md](modules/project_window_setup.md) | 已上线 | 2026-06-06 | 透明无边框置顶窗口的 Tauri 5 个 flag + 3 处 CSS |
+| AI 桌宠长期目标 | [modules/project_ai_pet_vision.md](modules/project_ai_pet_vision.md) | 路线图 | 2026-06-07 | LLM 决策+桌面感知+文字选区+对话+记忆；6 个 spec 路线图 |
+| 01 宠物交互层 | [docs/specs/01-pet-interaction-layer.md](../../docs/specs/01-pet-interaction-layer.md) | DONE | 2026-06-06 | F1-F6 全部实现并验收通过：状态机+Rust IPC+右键菜单+窗口自适应+3 动画播放正常 |
+| 02 LLM 状态决策 | [docs/specs/02-llm-decision.md](../../docs/specs/02-llm-decision.md) | DRAFT | 2026-06-07 | OpenAI 兼容 API 替换占位 decider + 右键菜单重构为宠物管理中心 + overlay 面板 |
+| 05/06 Chat + Memory | [modules/project_chat_memory.md](modules/project_chat_memory.md) | 已上线 | 2026-06-07 | 对话系统+5 层记忆+LTM 持久化+ReAct 决策+工具系统+宠物名称 |
+| 工具系统 | [modules/project_tools.md](modules/project_tools.md) | 已上线 | 2026-06-07 | ToolRegistry 统一管理 get_current_time / switch_animation / speak_to_user + 终端/非终端工具 |
+| 窗口配置 | [modules/project_window_setup.md](modules/project_window_setup.md) | 已上线 | 2026-06-06 | 透明无边框置顶窗口的 Tauri 5 个 flag + 3 处 CSS；窗口尺寸运行时动态 |
 | 精灵图管线 | [modules/project_sprite_pipeline.md](modules/project_sprite_pipeline.md) | 已上线 | 2026-06-06 | GIF → sprite sheet 的目录约定、命名映射、CSS steps 播放 |
 | 窗口拖拽 | [modules/project_window_drag.md](modules/project_window_drag.md) | 已上线 | 2026-06-06 | 鼠标左键按住拖动整个 Tauri 窗口 |
+| Rust 数据类型 | [modules/project_rust_types.md](modules/project_rust_types.md) | 已上线 | 2026-06-07 | types.rs 定义所有 serde 结构，前后端共用 R7 契约 |
+| 前端组合式 | [modules/project_frontend_composables.md](modules/project_frontend_composables.md) | 已上线 | 2026-06-07 | useAnimationRegistry / useAnimationStateMachine / useContextMenu / usePetSettings / usePetChat + decider/ |
 <!-- INDEX:MODULES:END -->
 
 ### 1.2 参考类记忆
@@ -35,6 +41,7 @@
 | 坑 | 路径 | 触发条件 | 一句话规则 |
 |---|---|---|---|
 | cargo 国内 SSL | [bugs/bug_cargo_crates_io_ssl.md](bugs/bug_cargo_crates_io_ssl.md) | 国内网络首次 cargo build | `~/.cargo/config.toml` 用 sparse+https://rsproxy.cn/index/ |
+| UTF-8 切片 panic | [bugs/bug_rust_utf8_slice_panic.md](bugs/bug_rust_utf8_slice_panic.md) | 硬编码字节索引切中文前缀/日志截断 | 用 `strip_prefix()` 和 `chars().take()` 代替字节索引 |
 <!-- INDEX:BUGS:END -->
 
 ---

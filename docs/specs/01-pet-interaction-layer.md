@@ -1,6 +1,6 @@
 ---
 name: 宠物交互层（多动画+右键菜单+状态机+Rust IPC+窗口自适应）
-status: FROZEN
+status: DONE
 created: 2026-06-06
 owner: darven
 related:
@@ -360,3 +360,4 @@ export interface AppError { code: AppErrorCode; message: string }
 - 2026-06-06 v1:建 spec, status: DRAFT。基于 F1-F6 + R1-R7 清单,首次落 spec
 - 2026-06-06 v2:基于评审⚠修复 6 条(VITE_ 前缀统一 / ticker skip 位置明确 / 默认动画明确 / 切同动画定义明确 / 日志约定新增 / 菜单防出屏补 AC),重新提交评审
 - 2026-06-06 v3:评审通过 0✗0⚠, status: FROZEN。**锁定契约**——后续修改必须走 CHANGED → DRAFT 流程,不允许直接改 FROZEN 内容
+- 2026-06-06 v4:实现完成,所有动画播放正常, status: DONE。修复 2 个 bug: CSS @keyframes 需放非 scoped <style> 块(var(--end-x) 才生效); gif-to-sheet 脚本加 -vsync 0(修复帧数虚高/黑帧)

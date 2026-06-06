@@ -52,28 +52,47 @@ public/sprites/
 
 ## 四、前端播放（CSS `steps()`）
 
+**当前实现**（App.vue 中由 `spriteStyle` computed 驱动）：
+```ts
+spriteStyle = {
+  "--end-x": "-<frameCount × frameWidth>px",
+  width: "<frameWidth>px",
+  height: "<frameHeight>px",
+  backgroundImage: "url('<sheetPath>')",
+  backgroundSize: "<frameCount × frameWidth>px <frameHeight>px",
+  animation: "play <frameCount/fps * 1000>ms steps(<frameCount>) <infinite|1>",
+};
+```
+
 ```css
-.pet-sprite {
-  width: 240px;                              /* = 单帧宽 */
-  height: 240px;                             /* = 单帧高 */
-  background: url('/sprites/touch_nose_sheet.png') no-repeat;
-  background-size: 6720px 240px;             /* = (帧数×单帧宽) × 单帧高 */
-  animation: play 1120ms steps(28) infinite; /* 1120ms = 帧数×40ms (25fps) */
-}
 @keyframes play {
   from { background-position-x: 0; }
-  to   { background-position-x: -6720px; }   /* 负的 (帧数-1)×单帧宽 ... 实际是 -总宽 */
+  to   { background-position-x: var(--end-x); }
 }
 ```
 
-**多动画切换**：通过 JS 改 `background-image` / `animation` 即可，无需新组件。
+**关键技巧**：`--end-x` 用 CSS 变量 + v-bind，1 个 @keyframes 适配所有动画。
 
-## 五、相关记忆
+**多动画切换**：dispatch 改 state.current → computed 重新算 → 整个 style 一次更新。preload 在 watch 里完成（先缓存所有 sheet），切的时候零黑帧。
+
+## 五、当前 sheet 元数据（来自 registry.rs）
+
+| 动画 | 单帧 | 帧数 | FPS | 循环 |
+|---|---|---|---|---|
+| touch_nose | 240×240 | 28 | 25 | infinite |
+| think | 155×155 | 26 | 25 | infinite |
+| poop | 155×155 | 121 | 25 | once |
+
+> 注意：`think_sheet.png` 是 4030÷155=**26** 帧（不是源 GIF 的 22 帧，ffmpeg 抽帧会插重复帧）；`poop_sheet.png` 是 121 帧（源 GIF 36 帧）。sheet 帧数才是播放真相。
+
+## 六、相关记忆
 
 - [窗口配置](project_window_setup.md) — 窗口尺寸 = 单帧尺寸
+- [Rust 数据类型](project_rust_types.md) — registry 怎么算 frame_count
 
 ---
 
 ## 变更历史
 
 - 2026-06-06：建模块。当前 3 个 sheet（touch_nose/think/poop），单帧 240×240 或 155×155
+- 2026-06-06：CSS 改 v-bind + CSS 变量；元数据表记录 sheet 真实帧数 vs 源 GIF 帧数差异

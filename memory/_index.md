@@ -14,6 +14,7 @@
 | 模块 | 路径 | 状态 | 最后更新 | 一句话 |
 |---|---|---|---|---|
 | SDD 工作流 | [modules/project_sdd_workflow.md](modules/project_sdd_workflow.md) | 已上线 | 2026-06-06 | 所有新功能必须走 Spec 先行 → 评审冻结 → 实现 → 验收，对应 sdd skill |
+| AI 桌宠长期目标 | [modules/project_ai_pet_vision.md](modules/project_ai_pet_vision.md) | 路线图 | 2026-06-06 | LLM 决策+桌面感知+文字选区+对话+记忆；6 个 spec 路线图 |
 | 窗口配置 | [modules/project_window_setup.md](modules/project_window_setup.md) | 已上线 | 2026-06-06 | 透明无边框置顶窗口的 Tauri 5 个 flag + 3 处 CSS |
 | 精灵图管线 | [modules/project_sprite_pipeline.md](modules/project_sprite_pipeline.md) | 已上线 | 2026-06-06 | GIF → sprite sheet 的目录约定、命名映射、CSS steps 播放 |
 | 窗口拖拽 | [modules/project_window_drag.md](modules/project_window_drag.md) | 已上线 | 2026-06-06 | 鼠标左键按住拖动整个 Tauri 窗口 |

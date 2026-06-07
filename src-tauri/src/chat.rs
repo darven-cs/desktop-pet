@@ -1,5 +1,9 @@
+use std::time::Duration;
+
 use crate::memory::types::{ChatMessage, ChatResponse};
 use crate::types::{AppError, DecisionContext};
+
+const MAX_PARSE_RETRIES: u32 = 3;
 
 /// Build the system prompt for chat.
 fn build_chat_system_prompt(
@@ -68,15 +72,106 @@ fn build_chat_user_prompt(
     parts.join("\n")
 }
 
-/// Parse chat LLM response from a message object.
-fn parse_chat_from_message(msg: &serde_json::Value) -> Result<ChatResponse, String> {
+/// Try to parse LLM message content as ChatResponse JSON.
+/// Returns Ok(ChatResponse) on success, Err(raw_text) on failure.
+fn try_parse_chat_response(msg: &serde_json::Value) -> Result<ChatResponse, String> {
     let content = msg["content"].as_str().unwrap_or("");
     let trimmed = content.trim();
-    let parsed: ChatResponse = serde_json::from_str(trimmed).map_err(|e| {
-        let raw: String = trimmed.chars().take(150).collect();
-        format!("{} | raw='{}'", e, raw)
-    })?;
-    Ok(parsed)
+    if trimmed.is_empty() {
+        return Err("(empty response)".to_string());
+    }
+    serde_json::from_str::<ChatResponse>(trimmed)
+        .map_err(|_| trimmed.to_string())
+}
+
+/// Send a chat request and parse the response, with exponential backoff on JSON parse failure.
+/// On each retry, feeds the malformed response back to the LLM with a correction instruction.
+async fn request_and_parse(
+    client: &reqwest::Client,
+    endpoint: &str,
+    api_key: &str,
+    model: &str,
+    messages: &mut Vec<serde_json::Value>,
+    has_tools: bool,
+) -> Result<ChatResponse, AppError> {
+    let mut backoff_ms = 600u64;
+
+    for attempt in 0..=MAX_PARSE_RETRIES {
+        let use_json_format = has_tools || attempt > 0;
+
+        let mut body = serde_json::json!({
+            "model": model,
+            "temperature": 0.8,
+            "max_tokens": 512,
+            "messages": messages.clone(),
+        });
+        if use_json_format {
+            body["response_format"] = serde_json::json!({ "type": "json_object" });
+        }
+
+        let resp_body = crate::llm::do_http_request(client, endpoint, api_key, &body)
+            .await
+            .map_err(|e| AppError::internal(e.to_string()))?;
+
+        let root: serde_json::Value =
+            serde_json::from_str(&resp_body).map_err(|e| AppError::internal(e.to_string()))?;
+
+        let choice = &root["choices"][0];
+        let msg = &choice["message"];
+
+        // If there are tool calls, return a marker so the caller can process them.
+        if let Some(tool_calls) = msg["tool_calls"].as_array() {
+            if !tool_calls.is_empty() {
+                // Package tool_calls into a "pseudo" ChatResponse for the caller.
+                return Ok(ChatResponse {
+                    message: String::new(),
+                    animation: Some("__tool_calls__".to_string()),
+                });
+            }
+        }
+
+        match try_parse_chat_response(msg) {
+            Ok(response) => {
+                eprintln!(
+                    "[PetChat] response: {}",
+                    serde_json::to_string(&response).unwrap_or_default()
+                );
+                return Ok(response);
+            }
+            Err(raw_text) => {
+                if attempt < MAX_PARSE_RETRIES {
+                    let preview: String = raw_text.chars().take(100).collect();
+                    eprintln!(
+                        "[PetChat] JSON parse failed (attempt {}/{}), retrying in {}ms: {}…",
+                        attempt + 1,
+                        MAX_PARSE_RETRIES,
+                        backoff_ms,
+                        preview
+                    );
+                    // Feed the malformed response back with a correction instruction.
+                    messages.push(msg.clone());
+                    messages.push(serde_json::json!({
+                        "role": "user",
+                        "content": "你上次返回的不是合法 JSON。请严格按照 {\"message\":\"回复内容\",\"animation\":null} 格式返回，不要返回任何其他文字。"
+                    }));
+                    tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
+                    backoff_ms = backoff_ms.saturating_mul(2);
+                } else {
+                    // Max retries: use raw text as fallback.
+                    eprintln!(
+                        "[PetChat] max retries exceeded, using raw text as fallback ({} chars)",
+                        raw_text.len()
+                    );
+                    return Ok(ChatResponse {
+                        message: raw_text,
+                        animation: None,
+                    });
+                }
+            }
+        }
+    }
+
+    Err(AppError::internal("unreachable"))
 }
 
 /// Send a chat message and get a pet response, with tool support.
@@ -129,7 +224,7 @@ pub async fn send_chat_message(
     };
 
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_millis(timeout))
+        .timeout(Duration::from_millis(timeout))
         .build()
         .map_err(|e| AppError::internal(e.to_string()))?;
 
@@ -144,31 +239,44 @@ pub async fn send_chat_message(
         endpoint, model, masked_key, tools_schema.len()
     );
 
-    // Round 1: with tools.
-    let mut body = serde_json::json!({
-        "model": model,
-        "temperature": 0.8,
-        "max_tokens": 512,
-        "messages": messages,
-        "tools": tools_schema,
-    });
+    // Round 1: with tools. request_and_parse handles JSON parse retries internally.
+    let mut response = request_and_parse(
+        &client,
+        &endpoint,
+        &api_key,
+        &model,
+        &mut messages,
+        !tools_schema.is_empty(),
+    )
+    .await?;
 
-    let resp_body = crate::llm::do_http_request(&client, &endpoint, &api_key, &body)
-        .await
-        .map_err(|e| AppError::internal(e.to_string()))?;
+    // Check if the response has pending tool calls.
+    if response.animation.as_deref() == Some("__tool_calls__") {
+        // Re-fetch the last assistant message (which contains tool_calls).
+        // We need to re-parse the last HTTP response to get the actual tool_calls.
+        // request_and_parse already pushed the assistant message to `messages`
+        // when retries happened, but for the tool_calls case we need the raw msg.
+        //
+        // Re-do round 1 without retry wrapper to get the raw response.
+        let body = serde_json::json!({
+            "model": model,
+            "temperature": 0.8,
+            "max_tokens": 512,
+            "messages": messages,
+            "tools": tools_schema,
+        });
 
-    let root: serde_json::Value =
-        serde_json::from_str(&resp_body).map_err(|e| AppError::internal(e.to_string()))?;
+        let resp_body = crate::llm::do_http_request(&client, &endpoint, &api_key, &body)
+            .await
+            .map_err(|e| AppError::internal(e.to_string()))?;
 
-    let choice = &root["choices"][0];
-    let msg = &choice["message"];
+        let root: serde_json::Value =
+            serde_json::from_str(&resp_body).map_err(|e| AppError::internal(e.to_string()))?;
 
-    // Check for tool calls.
-    if let Some(tool_calls) = msg["tool_calls"].as_array() {
-        if tool_calls.is_empty() {
-            return parse_chat_from_message(msg)
-                .map_err(|e| AppError::internal(format!("parse error: {}", e)));
-        }
+        let msg = &root["choices"][0]["message"];
+        let tool_calls = msg["tool_calls"].as_array().ok_or_else(|| {
+            AppError::internal("expected tool_calls but none found")
+        })?;
 
         eprintln!("[PetChat] tool calls: {}", tool_calls.len());
 
@@ -193,39 +301,18 @@ pub async fn send_chat_message(
             }));
         }
 
-        // Round 2: with tool results, force JSON output.
-        body = serde_json::json!({
-            "model": model,
-            "temperature": 0.8,
-            "max_tokens": 512,
-            "response_format": { "type": "json_object" },
-            "messages": messages,
-        });
-
-        let resp_body2 = crate::llm::do_http_request(&client, &endpoint, &api_key, &body)
-            .await
-            .map_err(|e| AppError::internal(e.to_string()))?;
-
-        let root2: serde_json::Value =
-            serde_json::from_str(&resp_body2).map_err(|e| AppError::internal(e.to_string()))?;
-        let msg2 = &root2["choices"][0]["message"];
-
-        let response = parse_chat_from_message(msg2)
-            .map_err(|e| AppError::internal(format!("parse error: {}", e)))?;
-        eprintln!(
-            "[PetChat] response: {}",
-            serde_json::to_string(&response).unwrap_or_default()
-        );
-        return Ok(response);
+        // Round 2: with tool results, force JSON output. Retry on parse failure.
+        response = request_and_parse(
+            &client,
+            &endpoint,
+            &api_key,
+            &model,
+            &mut messages,
+            false, // no tools in round 2
+        )
+        .await?;
     }
 
-    // No tool calls, parse directly.
-    let response = parse_chat_from_message(msg)
-        .map_err(|e| AppError::internal(format!("parse error: {}", e)))?;
-    eprintln!(
-        "[PetChat] response: {}",
-        serde_json::to_string(&response).unwrap_or_default()
-    );
     Ok(response)
 }
 

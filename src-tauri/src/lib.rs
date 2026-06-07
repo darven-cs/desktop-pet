@@ -10,7 +10,11 @@ mod types;
 use std::sync::Mutex;
 
 use memory::types::{ChatMessage, MemoryEntry};
+use tauri::menu::{Menu, MenuItemBuilder, PredefinedMenuItem};
+use tauri::{AppHandle, Emitter, WebviewWindow};
 use types::{AppError, Decision, DecisionContext};
+
+const CTX_MENU_EVENT: &str = "context-menu-click";
 
 /// Strip "用户: " or "宠物: " prefix from conversation content safely.
 fn strip_conversation_prefix(content: &str) -> String {
@@ -336,6 +340,38 @@ fn read_clipboard() -> Result<String, AppError> {
     Ok(text)
 }
 
+/// Build the right-click context menu and show it as a native popup at the
+/// cursor position. Using Tauri native menu (instead of an in-webview <div>)
+/// avoids WebView2's Chromium-layer context menu flash on Windows.
+#[tauri::command]
+fn show_context_menu(app: AppHandle, window: WebviewWindow) -> Result<(), AppError> {
+    let status = MenuItemBuilder::with_id("ctx.status", "宠物状态")
+        .build(&app)
+        .map_err(|e| AppError::internal(format!("build status: {e}")))?;
+    let settings = MenuItemBuilder::with_id("ctx.settings", "宠物设定")
+        .build(&app)
+        .map_err(|e| AppError::internal(format!("build settings: {e}")))?;
+    let chat = MenuItemBuilder::with_id("ctx.chat", "宠物对话")
+        .build(&app)
+        .map_err(|e| AppError::internal(format!("build chat: {e}")))?;
+    let memory = MenuItemBuilder::with_id("ctx.memory", "宠物记忆")
+        .build(&app)
+        .map_err(|e| AppError::internal(format!("build memory: {e}")))?;
+    let separator = PredefinedMenuItem::separator(&app)
+        .map_err(|e| AppError::internal(format!("build separator: {e}")))?;
+    let exit = MenuItemBuilder::with_id("ctx.exit", "退出")
+        .build(&app)
+        .map_err(|e| AppError::internal(format!("build exit: {e}")))?;
+
+    let menu = Menu::with_items(&app, &[&status, &settings, &chat, &memory, &separator, &exit])
+        .map_err(|e| AppError::internal(format!("build menu: {e}")))?;
+
+    window
+        .popup_menu(&menu)
+        .map_err(|e| AppError::internal(format!("popup_menu: {e}")))?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let _ = dotenvy::dotenv();
@@ -350,6 +386,13 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(memory_manager)
+        .on_menu_event(|app, event| {
+            let id = event.id().0.clone();
+            eprintln!("[PetMenu] click: {id}");
+            if let Err(e) = app.emit(CTX_MENU_EVENT, id) {
+                eprintln!("[PetError] emit {CTX_MENU_EVENT} failed: {e}");
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             greet,
             list_animations,
@@ -362,6 +405,7 @@ pub fn run() {
             get_memories,
             record_interaction,
             read_clipboard,
+            show_context_menu,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -23,7 +23,7 @@
 | 精灵图管线 | [modules/project_sprite_pipeline.md](modules/project_sprite_pipeline.md) | 已上线 | 2026-06-07 | GIF → sprite sheet 的目录约定、命名映射、CSS steps 播放；当前 11 个 sheet |
 | 窗口拖拽 | [modules/project_window_drag.md](modules/project_window_drag.md) | 已上线 | 2026-06-06 | 鼠标左键按住拖动整个 Tauri 窗口 |
 | Rust 数据类型 | [modules/project_rust_types.md](modules/project_rust_types.md) | 已上线 | 2026-06-07 | types.rs 定义所有 serde 结构，前后端共用 R7 契约；registry 已知 11 个动画 |
-| 前端组合式 | [modules/project_frontend_composables.md](modules/project_frontend_composables.md) | 已上线 | 2026-06-07 | usePetEvents 主动 chat 修复(proactive flag) + 配置化(proactiveIntervalMs/minSilenceMs) + 退避+reminder 立即触发；AnimationId 扩到 11 项；右键菜单去掉"手动切动画" |
+| 前端组合式 | [modules/project_frontend_composables.md](modules/project_frontend_composables.md) | 已上线 | 2026-06-07 | usePetEvents 主动 chat 修复(proactive flag) + 配置化(proactiveIntervalMs/minSilenceMs) + 退避+reminder 立即触发；AnimationId 扩到 11 项；useContextMenu 已删，菜单改走 Tauri native |
 <!-- INDEX:MODULES:END -->
 
 ### 1.2 参考类记忆
@@ -31,6 +31,7 @@
 <!-- INDEX:REFS:START -->
 | 条目 | 路径 | 一句话 |
 |---|---|---|
+| Tag 已发布后修 bug | [feedback_release_tag_workflow.md](feedback_release_tag_workflow.md) | `git tag -f v0.x <fix-sha> && git push --force origin v0.x`，CI 重跑 + update 旧 release |
 <!-- INDEX:REFS:END -->
 
 ---
@@ -43,6 +44,9 @@
 | cargo 国内 SSL | [bugs/bug_cargo_crates_io_ssl.md](bugs/bug_cargo_crates_io_ssl.md) | 国内网络首次 cargo build | `~/.cargo/config.toml` 用 sparse+https://rsproxy.cn/index/ |
 | UTF-8 切片 panic | [bugs/bug_rust_utf8_slice_panic.md](bugs/bug_rust_utf8_slice_panic.md) | 硬编码字节索引切中文前缀/日志截断 | 用 `strip_prefix()` 和 `chars().take()` 代替字节索引 |
 | 生产环境 sprites 找不到 | [bugs/bug_production_sprites_path.md](bugs/bug_production_sprites_path.md) | .deb 安装后从任意目录运行 | `locate_sprites_dir()` 加 exe-relative 搜索 + `bundle.resources` |
+| Tauri v2 关窗权限 | [bugs/bug_tauri_window_close_permission.md](bugs/bug_tauri_window_close_permission.md) | `getCurrentWindow().close()` 静默失败 | `core:window:allow-close` 必须显式加；调用方 await + try/catch |
+| Mermaid 图渲染失败 | [bugs/bug_mermaid_layout_failure.md](bugs/bug_mermaid_layout_failure.md) | 节点 ≥12 或 label 含 `<br/>` / `·` / 长字符串 | `flowchart LR` + 单行 label ≤20 字符；不行就拆图或回退 ASCII |
+| WebView2 右键黑框 | [bugs/bug_webview2_contextmenu_black_flash.md](bugs/bug_webview2_contextmenu_black_flash.md) | Windows + `transparent: true` + 右击 | in-webview `<div>` 拦不住 WebView2 native context menu；改用 `tauri::menu::Menu` + `popup_menu` |
 <!-- INDEX:BUGS:END -->
 
 ---

@@ -2,9 +2,10 @@
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { LogicalSize } from "@tauri-apps/api/dpi";
+import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useAnimationRegistry } from "./composables/useAnimationRegistry";
 import { useAnimationStateMachine } from "./composables/useAnimationStateMachine";
-import { useContextMenu, type MenuItem } from "./composables/useContextMenu";
 import { usePetSettings } from "./composables/usePetSettings";
 import { usePetEvents } from "./composables/usePetEvents";
 import type { AnimationEntry, AnimationId, AgentResult } from "./types/pet";
@@ -14,9 +15,6 @@ import PetChatPanel from "./components/PetChatPanel.vue";
 import PetMemoryPanel from "./components/PetMemoryPanel.vue";
 
 // --- Constants ---
-const MENU_ITEM_H = 30;
-const MENU_PADDING_H = 12;
-const MENU_EST_WIDTH = 160;
 const OVERLAY_EST_W = 310;
 const OVERLAY_EST_H = 390;
 
@@ -80,16 +78,6 @@ const { pushEvent } = usePetEvents({
 });
 pushEventFn = pushEvent;
 
-const {
-  isOpen: menuIsOpen,
-  items: menuItems,
-  open: menuOpen,
-  onItemClick: menuOnItemClick,
-  activeSubmenu,
-  toggleSubmenu,
-  menuStyle,
-} = useContextMenu();
-
 const overlay = ref<"status" | "settings" | "chat" | "memory" | null>(null);
 const chatContextText = ref<string | null>(null);
 
@@ -104,6 +92,35 @@ function closeOverlay() {
   overlay.value = null;
   chatContextText.value = null;
   petSpeakMessage.value = null;
+}
+
+// --- Native context menu (Tauri menu, not in-webview <div>) ---
+// Menu ids are defined in src-tauri/src/lib.rs::show_context_menu.
+const CTX_MENU_EVENT = "context-menu-click";
+let unlistenMenu: UnlistenFn | null = null;
+
+function handleMenuClick(id: string) {
+  switch (id) {
+    case "ctx.status":
+      showOverlay("status");
+      break;
+    case "ctx.settings":
+      showOverlay("settings");
+      break;
+    case "ctx.chat":
+      showOverlay("chat");
+      break;
+    case "ctx.memory":
+      showOverlay("memory");
+      break;
+    case "ctx.exit":
+      getCurrentWindow()
+        .close()
+        .catch((e) => console.error("[PetExit] close failed:", e));
+      break;
+    default:
+      console.warn(`[PetMenu] unknown menu id: ${id}`);
+  }
 }
 
 // Left-click short-press detection for clipboard chat.
@@ -158,6 +175,14 @@ function startDrag(e: MouseEvent) {
     });
 }
 
+function onContextMenu(e: MouseEvent) {
+  e.preventDefault();
+  closeOverlay();
+  invoke("show_context_menu").catch((err) => {
+    console.error("[PetMenu] show_context_menu failed:", err);
+  });
+}
+
 const currentEntry = computed<AnimationEntry | undefined>(() =>
   registry.value.find((e) => e.id === state.value.current),
 );
@@ -168,7 +193,7 @@ const totalDuration = computed(() => {
   return (c.frameCount / c.fps) * 1000;
 });
 
-// Sprite dimensions (base window size when no menu/overlay is open).
+// Sprite dimensions (base window size when no overlay is open).
 const spriteW = computed(() => currentEntry.value?.frameWidth ?? 240);
 const spriteH = computed(() => currentEntry.value?.frameHeight ?? 240);
 
@@ -187,19 +212,8 @@ const spriteStyle = computed(() => {
   };
 });
 
-function menuPixelVal(styleVal: string | undefined, fallback: number): number {
-  if (!styleVal) return fallback;
-  const n = parseFloat(styleVal);
-  return Number.isFinite(n) ? n : fallback;
-}
-
 const needWindowW = computed(() => {
   let w = spriteW.value;
-  if (menuIsOpen.value) {
-    const left = menuPixelVal(menuStyle.value?.left, 0);
-    const menuRight = left + MENU_EST_WIDTH;
-    w = Math.max(w, menuRight);
-  }
   if (overlay.value) {
     w = Math.max(w, OVERLAY_EST_W);
   }
@@ -208,12 +222,6 @@ const needWindowW = computed(() => {
 
 const needWindowH = computed(() => {
   let h = spriteH.value;
-  if (menuIsOpen.value) {
-    const top = menuPixelVal(menuStyle.value?.top, 0);
-    const nItems = menuItems.value.length;
-    const menuBottom = top + nItems * MENU_ITEM_H + MENU_PADDING_H;
-    h = Math.max(h, menuBottom);
-  }
   if (overlay.value) {
     h = Math.max(h, spriteH.value + OVERLAY_EST_H);
   }
@@ -279,11 +287,18 @@ onMounted(async () => {
   // Window focus/blur events for Agent Loop
   window.addEventListener("focus", onFocusChange);
   window.addEventListener("blur", onFocusChange);
+
+  // Native context menu event listener (Rust → frontend dispatch).
+  unlistenMenu = await listen<string>(CTX_MENU_EVENT, (e) => {
+    handleMenuClick(e.payload);
+  });
 });
 
 onUnmounted(() => {
   window.removeEventListener("focus", onFocusChange);
   window.removeEventListener("blur", onFocusChange);
+  unlistenMenu?.();
+  unlistenMenu = null;
 });
 
 function onFocusChange() {
@@ -316,42 +331,6 @@ function onPetDragEnd() {
     interaction: "drag_end",
     timestamp: Date.now(),
   });
-}
-
-function onContextMenu(e: MouseEvent) {
-  closeOverlay();
-
-  const items: MenuItem[] = [
-    {
-      label: "宠物状态",
-      onClick: () => showOverlay("status"),
-    },
-    {
-      label: "宠物设定",
-      onClick: () => showOverlay("settings"),
-    },
-    {
-      label: "宠物对话",
-      onClick: () => showOverlay("chat"),
-    },
-    {
-      label: "宠物记忆",
-      onClick: () => showOverlay("memory"),
-    },
-    { type: "separator" },
-    {
-      label: "退出",
-      onClick: async () => {
-        try {
-          await getCurrentWindow().close();
-        } catch (e) {
-          console.error("[PetExit] close failed:", e);
-        }
-      },
-    },
-  ];
-
-  menuOpen({ x: e.clientX, y: e.clientY }, items);
 }
 
 function onSettingsSave(s: typeof settings.value) {
@@ -425,52 +404,6 @@ function onChatMessageSent() {
       @close="closeOverlay"
     />
   </div>
-
-  <!-- Context menu -->
-  <div
-    v-if="menuIsOpen"
-    class="context-menu"
-    :style="menuStyle"
-    @contextmenu.prevent
-  >
-    <template v-for="(item, i) in menuItems" :key="i">
-      <div v-if="item.type === 'separator'" class="menu-separator"></div>
-
-      <div
-        v-else-if="item.type === 'submenu'"
-        class="menu-item submenu-parent"
-        :class="{ 'submenu-open': activeSubmenu === item.label }"
-        @mousedown.stop
-        @click.stop="toggleSubmenu(item.label!)"
-      >
-        <span>{{ item.label }}</span>
-        <span class="submenu-arrow">▶</span>
-        <div v-if="activeSubmenu === item.label" class="submenu-dropdown">
-          <div
-            v-for="(child, j) in item.children"
-            :key="j"
-            class="menu-item"
-            :class="{ current: child.current }"
-            @mousedown.stop
-            @click="menuOnItemClick(child)"
-          >
-            {{ child.label }}
-            <span v-if="child.current" class="current-dot">●</span>
-          </div>
-        </div>
-      </div>
-
-      <div
-        v-else
-        class="menu-item"
-        @mousedown.stop
-        @click="menuOnItemClick(item)"
-      >
-        {{ item.label }}
-        <span v-if="item.current" class="current-dot">●</span>
-      </div>
-    </template>
-  </div>
 </template>
 
 <style>
@@ -512,60 +445,6 @@ body,
   color: #666;
   font-size: 14px;
   user-select: none;
-}
-.context-menu {
-  position: fixed;
-  background: rgba(255, 255, 255, 0.96);
-  border: 1px solid #d0d0d0;
-  border-radius: 6px;
-  padding: 4px 0;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
-  z-index: 100;
-  min-width: 130px;
-  font-size: 13px;
-  user-select: none;
-}
-.menu-item {
-  padding: 6px 12px;
-  cursor: pointer;
-  white-space: nowrap;
-  color: #222;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.menu-item:hover {
-  background: rgba(0, 120, 215, 0.12);
-}
-.menu-separator {
-  height: 1px;
-  background: #e0e0e0;
-  margin: 4px 0;
-}
-.submenu-parent {
-  position: relative;
-}
-.submenu-arrow {
-  font-size: 10px;
-  margin-left: 16px;
-  color: #999;
-}
-.submenu-dropdown {
-  position: absolute;
-  left: 100%;
-  top: -4px;
-  background: rgba(255, 255, 255, 0.96);
-  border: 1px solid #d0d0d0;
-  border-radius: 6px;
-  padding: 4px 0;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
-  min-width: 100px;
-  z-index: 101;
-}
-.current-dot {
-  color: #0078d7;
-  font-size: 8px;
-  margin-left: 8px;
 }
 </style>
 

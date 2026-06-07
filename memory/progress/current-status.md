@@ -1,13 +1,13 @@
 # 当前状态
 
-**更新时间**：2026-06-07 13:30
+**更新时间**：2026-06-07 14:00
 
 ---
 
 ## 正在做
 
-- **任务**：新增 8 个动画（shush/thumbs_up/nervous/sleep/peek/knead/heartbeat/cloud）+ 移除右键菜单"手动切动画"子菜单；cargo check + vue-tsc 通过
-- **下一动作**：用户跑 `npm run tauri dev` 验收新动画 + 检查右键菜单
+- **任务**：v0.2.0 已发布（8 个新动画 + spec 05 + 修复退出/Mermaid 后的 tag 移动）；CI 正在重跑 release
+- **下一动作**：等 GitHub Actions v0.2.0 build 完，检查 release assets 时间戳是否更新
 
 ## 下一步
 

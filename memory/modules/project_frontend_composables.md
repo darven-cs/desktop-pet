@@ -8,7 +8,7 @@ type: project
 
 **状态**：已上线
 **上线时间**：2026-06-06
-**所属业务**：交互层（01 spec）
+**所属业务**：交互层（01 spec）+ 02 spec (Chat/Memory) + 03/04/05 spec (Agent)
 
 4 个 Vue 3 composable + 1 个独立 decider 目录。状态机封装在 `useAnimationStateMachine` 内，**纯函数 reducer**（AC-F4.7），副作用（preload / setSize / 切 CSS）由 App.vue 的 watcher 触发。
 
@@ -23,7 +23,10 @@ src/
 └── composables/
     ├── useAnimationRegistry.ts         ← F2：启动调 list_animations，缓存为响应式 ref
     ├── useAnimationStateMachine.ts     ← F4：state + dispatch + ticker，reducer 纯函数
-    └── useContextMenu.ts               ← F3：绝对定位 <div>，全局单例 + 8px 防出屏
+    ├── usePetSettings.ts               ← 配置持久化（localStorage）
+    ├── usePetChat.ts                   ← 消息列表 + 剪贴板上下文
+    ├── usePetEvents.ts                 ← 事件队列 + debounce + agent 调度
+    └── (useContextMenu.ts 已删除)      ← 见 bugs/bug_webview2_contextmenu_black_flash.md
 ```
 
 ## 二、状态机接口
@@ -59,12 +62,16 @@ export function getDefaultDecider(): Decider
 
 01 默认实现 = Rust `decide_next_state` 薄包装（永远返 Stay）。02 spec 替换时改 `getDefaultDecider` 内部即可，状态机无感。
 
-## 五、useContextMenu 要点
+## 五、右键菜单实现（迁移到 Tauri native）
 
-- **全局单例**：module-level `activeCloser` 防止多个菜单同时开
-- **防出屏**：拿 `getCurrentWindow().outerPosition()` + `window.screen.{width,height}` 做翻转 + 8px clamp（AC-F3.8）
-- **估算尺寸**：`ESTIMATED_MENU_WIDTH=140`、`ESTIMATED_ITEM_HEIGHT=30`（首次 open 还没 render 所以只能估）
-- **关闭触发**：item 点击 / 外部 mousedown（`closest('.context-menu')` 排除）/ Esc
+`useContextMenu` 已删除。菜单现由 Rust 端 `tauri::menu::Menu` + `WebviewWindow::popup_menu` 在 OS 层绘制，前端通过 `invoke("show_context_menu")` 触发 + `listen("context-menu-click", ...)` 接收点击事件。
+
+**为什么迁**：in-webview `<div>` 菜单在 Windows WebView2 上有 native context menu 黑框闪烁 + setSize 异步裁剪问题。详见 [bugs/bug_webview2_contextmenu_black_flash.md](../bugs/bug_webview2_contextmenu_black_flash.md)。
+
+**当前实现**：
+- Rust（`src-tauri/src/lib.rs::show_context_menu`）：6 个 `MenuItemBuilder::with_id("ctx.xxx", "...")` + 1 个 `PredefinedMenuItem::separator` + `Menu::with_items` + `window.popup_menu`
+- 前端（`App.vue`）：`@contextmenu.prevent="onContextMenu"` → `invoke("show_context_menu")`；`onMounted` 里 `listen<string>("context-menu-click", ...)` 路由到 `showOverlay` / `close`
+- 菜单 id 前缀 `ctx.` 避免和未来其他菜单（tray 等）冲突
 
 ## 六、副作用分层
 
@@ -97,3 +104,5 @@ export function getDefaultDecider(): Decider
 - 2026-06-07：05 spec 前端。`types/pet.ts` Decision 新增 set_reminder 变体、PetEvent 新增 reminder_triggered 变体、user_interaction.interaction 新增 "chat"；`usePetEvents` 新增 consecutiveStays/lastAgentCallAt 追踪、shouldProactiveFlush 主动唤醒（5分钟静默+2分钟无交互）、退避逻辑（连续 stay>=4 不再 flush、>=2 延长 10s debounce）、reminder_triggered 立即 flush；`useAnimationStateMachine` 新增 PendingReminder/reminders 管理（MAX_REMINDERS=5）、set_reminder case（setTimeout 触发 pushEvent reminder_triggered）、isWaitingRef + interruptWait 方法暴露、wait 分支追踪 isWaiting、新增 onPushEvent 回调参数；`App.vue` 解构 interruptWait + 新增 onChatMessageSent（打断 wait + push chat 事件）+ 绑定 @chat-sent + 传入 onPushEvent；`PetChatPanel.vue` 新增 chatSent emit 并在 onSend 中触发
 - 2026-06-07：05 spec 修 bug + 配置化。① 修主动 chat 失效 bug：`usePetEvents.flush()` 加 `isProactive` 参数，proactive flush 跳过 `isDecidableEvent` 检查（之前主动唤醒被 `flush` 内部检查拦截，agent 根本没被调用）。② `usePetSettings` 新增 `proactiveIntervalMs`(300000) / `minSilenceMs`(120000) 两个持久化配置项，`usePetEvents` 改为从 settings 读取（不再硬编码）。③ `PetSettingsPanel.vue` 新增"主动聊天间隔"和"静默阈值"两个 number input，删除"Ticker 间隔"输入框（保留字段但不在 UI 暴露）；`.panel-body` 加 `max-height: 320px; overflow-y: auto` 防止内容溢出导致保存键看不见
 - 2026-06-07：动画扩展 + 右键菜单精简。① `types/pet.ts` 的 `AnimationId` union 从 3 项扩为 11 项（含 shush/thumbs_up/nervous/sleep/peek/knead/heartbeat/cloud）。② `App.vue` 的 `onContextMenu` 删掉 "手动切动画" 子菜单（用户要求）。子菜单渲染/CSS 代码保留（`item.type === 'submenu'` 分支仍在），不影响当前菜单展示，但以后想加别的子菜单可直接复用
+- 2026-06-07：修右键退出无效。根因 Tauri v2 `core:window:default` 不含 `allow-close`，调用方又没 await/catch → 静默失败。修法：capabilities 加 `core:window:allow-close` + 退出 onClick 改 async + try/catch + `[PetExit]` 日志
+- 2026-06-07：Windows 右键菜单彻底改造。删除 `useContextMenu` composable + Vue `<div class="context-menu">` + 6 个 CSS 类 + 3 个 MENU_EST_* 常量 + 2 个 computed 里的菜单尺寸逻辑 + menuPixelVal helper。改用 Rust `tauri::menu::Menu` + `WebviewWindow::popup_menu`（OS 层绘制，绕开 WebView2 Chromium context menu 闪烁），通过 `app.emit("context-menu-click", id)` → 前端 `listen<string>` 路由动作。`needWindowW/H` 不再因菜单变大。修法详见 [bugs/bug_webview2_contextmenu_black_flash.md](../bugs/bug_webview2_contextmenu_black_flash.md)

@@ -341,7 +341,13 @@ function onContextMenu(e: MouseEvent) {
     { type: "separator" },
     {
       label: "退出",
-      onClick: () => getCurrentWindow().close(),
+      onClick: async () => {
+        try {
+          await getCurrentWindow().close();
+        } catch (e) {
+          console.error("[PetExit] close failed:", e);
+        }
+      },
     },
   ];
 

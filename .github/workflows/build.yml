@@ -39,6 +39,19 @@ jobs:
       - name: Install frontend deps
         run: npm ci
 
+      - name: Cache Tauri AppImage tools
+        uses: actions/cache@v4
+        with:
+          # Tauri downloads AppRun + linuxdeploy into ~/.cache/tauri (see
+          # tauri-bundler/src/bundle/linux/appimage/linuxdeploy.rs). The
+          # bundler checks if the file exists before downloading, so caching
+          # the whole dir lets us skip the github.com download and survive
+          # transient 504s on tauri-apps/binary-releases.
+          path: ~/.cache/tauri
+          key: tauri-appimage-tools-ubuntu-22.04-x86_64-v1
+          restore-keys: |
+            tauri-appimage-tools-ubuntu-22.04-x86_64-
+
       - name: Build
         run: npm run tauri build -- --bundles deb,appimage
 

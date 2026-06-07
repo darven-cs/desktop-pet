@@ -160,10 +160,13 @@ pub fn locate_sprites_dir() -> PathBuf {
     // Production: search relative to the executable.
     if let Ok(exe) = std::env::current_exe() {
         if let Some(exe_dir) = exe.parent() {
+            // Tauri v2 converts .. in resource paths to _up_ on all platforms.
             let exe_candidates = [
+                // Windows / generic: alongside the exe
+                exe_dir.join("_up_/public/sprites"),
                 exe_dir.join("public/sprites"),
                 exe_dir.join("sprites"),
-                // Linux .deb / AppImage — Tauri v2 converts .. to _up_ in resource paths
+                // Linux .deb / AppImage
                 exe_dir.join("../lib/desktop-pet/_up_/public/sprites"),
                 exe_dir.join("../lib/desktop-pet/public/sprites"),
                 exe_dir.join("../lib/desktop-pet/sprites"),
@@ -171,6 +174,7 @@ pub fn locate_sprites_dir() -> PathBuf {
                 // macOS .app bundle
                 exe_dir.join("../Resources/sprites"),
                 exe_dir.join("../Resources/public/sprites"),
+                exe_dir.join("../Resources/_up_/public/sprites"),
                 exe_dir.join("../Resources"),
             ];
             for c in &exe_candidates {
@@ -178,11 +182,25 @@ pub fn locate_sprites_dir() -> PathBuf {
                     return c.clone();
                 }
             }
-            // Fallback: recursive search from the resource dir root (handles any
-            // directory nesting Tauri v2 may introduce, e.g. _up_ segments).
-            let resource_root = exe_dir.join("../lib/desktop-pet");
-            if let Some(found) = find_sprites_recursive(&resource_root, 5) {
-                return found;
+            // Fallback: recursive search from platform-specific resource roots.
+            let resource_roots: &[PathBuf] = if cfg!(target_os = "linux") {
+                &[
+                    exe_dir.join("../lib/desktop-pet"),
+                    exe_dir.to_path_buf(),
+                ]
+            } else if cfg!(target_os = "macos") {
+                &[
+                    exe_dir.join("../Resources"),
+                    exe_dir.to_path_buf(),
+                ]
+            } else {
+                // Windows: resources are alongside the exe.
+                &[exe_dir.to_path_buf()]
+            };
+            for root in resource_roots {
+                if let Some(found) = find_sprites_recursive(root, 5) {
+                    return found;
+                }
             }
         }
     }

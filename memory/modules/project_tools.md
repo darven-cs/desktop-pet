@@ -33,6 +33,8 @@ pub struct ToolDef {
 | `get_current_time` | 非终端（信息） | 查询当前精确时间，结果反馈给 LLM |
 | `switch_animation` | 终端 | 切换动画，返回 `Decision::Switch` |
 | `speak_to_user` | 终端 | 主动说话，返回 `Decision::Speak` |
+| `wait` | 终端 | 安静一段时间，返回 `Decision::Wait` |
+| `set_reminder` | 终端 | 设置定时提醒，返回 `Decision::SetReminder` |
 
 ## 三、schema() vs info_schema()
 
@@ -61,3 +63,5 @@ LLM 请求 (tools: schema)
 ## 变更历史
 
 - 2026-06-07：建模块。3 个内置工具 + ToolRegistry + 终端/非终端分离。
+- 2026-06-07：新增 `wait` + `set_reminder` 终端工具。
+- 2026-06-07：动画枚举扩展。`switch_animation` 和 `speak_to_user` 的 `animation` 字段 enum 从 `[touch_nose, think, poop]` 扩为 11 项（含 shush/thumbs_up/nervous/sleep/peek/knead/heartbeat/cloud）；description 同步改写"深夜安静 / 白天活泼"的子集划分

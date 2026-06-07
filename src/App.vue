@@ -40,7 +40,7 @@ const onSpeak = (message: string, animation: string | null) => {
 // Forward reference for pushEvent — resolved after usePetEvents is created.
 let pushEventFn: ((event: import("./types/pet").PetEvent) => void) | null = null;
 
-const { state, dispatch, tickerInterval, lastTickerReason, lastInteractionAt, applyAgentResult } =
+const { state, dispatch, tickerInterval, lastTickerReason, lastInteractionAt, applyAgentResult, interruptWait } =
   useAnimationStateMachine({
     llmEnabled: computed(() => settings.value.llmEnabled),
     petPersonality: computed(() => settings.value.petPersonality),
@@ -52,6 +52,9 @@ const { state, dispatch, tickerInterval, lastTickerReason, lastInteractionAt, ap
     onSpeak,
     onTickerTick: () => {
       pushEventFn?.({ type: "timer_tick", timestamp: Date.now() });
+    },
+    onPushEvent: (event) => {
+      pushEventFn?.(event);
     },
   });
 
@@ -69,6 +72,8 @@ const { pushEvent } = usePetEvents({
   llmApiKey: computed(() => settings.value.apiKey),
   llmModel: computed(() => settings.value.model),
   tickerInterval,
+  proactiveIntervalMs: computed(() => settings.value.proactiveIntervalMs),
+  minSilenceMs: computed(() => settings.value.minSilenceMs),
   getAnimationState: () => state.value,
   getLastInteractionAt: () => lastInteractionAt.value,
   onDecision: onAgentDecision,
@@ -316,17 +321,6 @@ function onPetDragEnd() {
 function onContextMenu(e: MouseEvent) {
   closeOverlay();
 
-  const animSubmenu: MenuItem[] = registry.value.map((entry) => ({
-    label: entry.id,
-    onClick: () =>
-      dispatch({
-        type: "switch_to",
-        id: entry.id,
-        source: "dispatch",
-      }),
-    current: entry.id === state.value.current,
-  }));
-
   const items: MenuItem[] = [
     {
       label: "宠物状态",
@@ -343,12 +337,6 @@ function onContextMenu(e: MouseEvent) {
     {
       label: "宠物记忆",
       onClick: () => showOverlay("memory"),
-    },
-    { type: "separator" },
-    {
-      type: "submenu",
-      label: "手动切动画",
-      children: animSubmenu,
     },
     { type: "separator" },
     {
@@ -370,6 +358,11 @@ function onChatSwitchAnimation(id: AnimationId) {
     id,
     source: "dispatch",
   });
+}
+
+function onChatMessageSent() {
+  interruptWait();
+  pushEvent({ type: "user_interaction", interaction: "chat", timestamp: Date.now() });
 }
 </script>
 
@@ -418,6 +411,7 @@ function onChatSwitchAnimation(id: AnimationId) {
       :pet-speak-message="petSpeakMessage"
       @close="closeOverlay"
       @switch-animation="onChatSwitchAnimation"
+      @chat-sent="onChatMessageSent"
     />
     <PetMemoryPanel
       v-if="overlay === 'memory'"

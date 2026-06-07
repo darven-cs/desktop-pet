@@ -82,6 +82,14 @@ spriteStyle = {
 | touch_nose | 240×240 | 28 | 25 | infinite |
 | think | 155×155 | 26 | 25 | infinite |
 | poop | 155×155 | 121 | 25 | once |
+| shush | 120×120 | 2 | 50 | once |
+| thumbs_up | 120×120 | 9 | 20 | once |
+| nervous | 155×155 | 13 | 25 | infinite |
+| sleep | 120×120 | 31 | 25 | infinite |
+| peek | 120×120 | 57 | 20 | infinite |
+| knead | 240×240 | 3 | 25 | infinite |
+| heartbeat | 155×155 | 6 | 25 | infinite |
+| cloud | 120×120 | 32 | 25 | infinite |
 
 > 注意：`think_sheet.png` 是 4030÷155=**26** 帧（不是源 GIF 的 22 帧，ffmpeg 抽帧会插重复帧）；`poop_sheet.png` 是 121 帧（源 GIF 36 帧）。sheet 帧数才是播放真相。
 
@@ -96,3 +104,4 @@ spriteStyle = {
 
 - 2026-06-06：建模块。当前 3 个 sheet（touch_nose/think/poop），单帧 240×240 或 155×155
 - 2026-06-06：CSS 改 v-bind + CSS 变量；元数据表记录 sheet 真实帧数 vs 源 GIF 帧数差异
+- 2026-06-07：新增 8 个 sheet（shush/thumbs_up/nervous/sleep/peek/knead/heartbeat/cloud）。命名映射：阿马提拉斯→shush（捂嘴嘘）、点赞→thumbs_up、紧张→nervous、睡觉→sleep、偷看→peek、无聊踩奶→knead、心动→heartbeat、一切都是浮云→cloud。手势类（shush/thumbs_up）用 once，状态类用 infinite

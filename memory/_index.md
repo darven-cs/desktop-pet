@@ -18,12 +18,12 @@
 | 01 宠物交互层 | [docs/specs/01-pet-interaction-layer.md](../../docs/specs/01-pet-interaction-layer.md) | DONE | 2026-06-06 | F1-F6 全部实现并验收通过：状态机+Rust IPC+右键菜单+窗口自适应+3 动画播放正常 |
 | 02 LLM 状态决策 | [docs/specs/02-llm-decision.md](../../docs/specs/02-llm-decision.md) | DRAFT | 2026-06-07 | OpenAI 兼容 API 替换占位 decider + 右键菜单重构为宠物管理中心 + overlay 面板 |
 | 05/06 Chat + Memory | [modules/project_chat_memory.md](modules/project_chat_memory.md) | 已上线 | 2026-06-07 | 对话系统+5 层记忆+LTM 持久化+ReAct 决策+工具系统+宠物名称 |
-| 工具系统 | [modules/project_tools.md](modules/project_tools.md) | 已上线 | 2026-06-07 | ToolRegistry 统一管理 get_current_time / switch_animation / speak_to_user + 终端/非终端工具 |
+| 工具系统 | [modules/project_tools.md](modules/project_tools.md) | 已上线 | 2026-06-07 | ToolRegistry 统一管理 get_current_time / switch_animation / speak_to_user / wait / set_reminder + 终端/非终端工具；动画 enum 扩到 11 项 |
 | 窗口配置 | [modules/project_window_setup.md](modules/project_window_setup.md) | 已上线 | 2026-06-06 | 透明无边框置顶窗口的 Tauri 5 个 flag + 3 处 CSS；窗口尺寸运行时动态 |
-| 精灵图管线 | [modules/project_sprite_pipeline.md](modules/project_sprite_pipeline.md) | 已上线 | 2026-06-06 | GIF → sprite sheet 的目录约定、命名映射、CSS steps 播放 |
+| 精灵图管线 | [modules/project_sprite_pipeline.md](modules/project_sprite_pipeline.md) | 已上线 | 2026-06-07 | GIF → sprite sheet 的目录约定、命名映射、CSS steps 播放；当前 11 个 sheet |
 | 窗口拖拽 | [modules/project_window_drag.md](modules/project_window_drag.md) | 已上线 | 2026-06-06 | 鼠标左键按住拖动整个 Tauri 窗口 |
-| Rust 数据类型 | [modules/project_rust_types.md](modules/project_rust_types.md) | 已上线 | 2026-06-07 | types.rs 定义所有 serde 结构，前后端共用 R7 契约 |
-| 前端组合式 | [modules/project_frontend_composables.md](modules/project_frontend_composables.md) | 已上线 | 2026-06-07 | usePetEvents 已加事件合并+条件 flush+animation_completed 过滤；budget 收紧至 3 次/分、15s 间隔 |
+| Rust 数据类型 | [modules/project_rust_types.md](modules/project_rust_types.md) | 已上线 | 2026-06-07 | types.rs 定义所有 serde 结构，前后端共用 R7 契约；registry 已知 11 个动画 |
+| 前端组合式 | [modules/project_frontend_composables.md](modules/project_frontend_composables.md) | 已上线 | 2026-06-07 | usePetEvents 主动 chat 修复(proactive flag) + 配置化(proactiveIntervalMs/minSilenceMs) + 退避+reminder 立即触发；AnimationId 扩到 11 项；右键菜单去掉"手动切动画" |
 <!-- INDEX:MODULES:END -->
 
 ### 1.2 参考类记忆

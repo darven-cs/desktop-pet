@@ -18,7 +18,8 @@ const apiKey = ref(props.settings.apiKey);
 const model = ref(props.settings.model);
 const petPersonality = ref(props.settings.petPersonality);
 const petName = ref(props.settings.petName);
-const tickerIntervalMs = ref(props.settings.tickerIntervalMs);
+const proactiveIntervalMs = ref(props.settings.proactiveIntervalMs);
+const minSilenceMs = ref(props.settings.minSilenceMs);
 
 function onSubmit() {
   emit("save", {
@@ -28,7 +29,9 @@ function onSubmit() {
     model: model.value,
     petPersonality: petPersonality.value,
     petName: petName.value,
-    tickerIntervalMs: tickerIntervalMs.value,
+    tickerIntervalMs: props.settings.tickerIntervalMs,
+    proactiveIntervalMs: proactiveIntervalMs.value,
+    minSilenceMs: minSilenceMs.value,
   });
   emit("close");
 }
@@ -78,13 +81,24 @@ function onSubmit() {
         </label>
 
         <label class="setting-row">
-          <span>Ticker 间隔 (ms)</span>
+          <span>主动聊天间隔 (ms)</span>
           <input
             type="number"
-            v-model.number="tickerIntervalMs"
+            v-model.number="proactiveIntervalMs"
             class="num-input"
-            min="1000"
-            step="1000"
+            min="60000"
+            step="30000"
+          />
+        </label>
+
+        <label class="setting-row">
+          <span>静默阈值 (ms)</span>
+          <input
+            type="number"
+            v-model.number="minSilenceMs"
+            class="num-input"
+            min="30000"
+            step="30000"
           />
         </label>
 
@@ -156,6 +170,8 @@ function onSubmit() {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  max-height: 320px;
+  overflow-y: auto;
 }
 .setting-row {
   display: flex;

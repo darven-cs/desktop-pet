@@ -11,6 +11,7 @@ interface CompactedEvent {
   type: PetEvent["type"];
   interaction?: string;
   focused?: boolean;
+  message?: string;
   timestamp: number;
   count: number;
 }
@@ -38,9 +39,11 @@ function compactEvents(events: PetEvent[]): CompactedEvent[] {
         type: key.type,
         interaction: key.interaction,
         focused: ev.type === "window_focus_changed" ? ev.focused : undefined,
+        message: ev.type === "reminder_triggered" ? ev.message : undefined,
         timestamp: ev.type === "timer_tick" ? ev.timestamp
           : ev.type === "user_interaction" ? ev.timestamp
           : ev.type === "window_focus_changed" ? ev.timestamp
+          : ev.type === "reminder_triggered" ? ev.timestamp
           : 0,
         count: 1,
       });
@@ -76,6 +79,8 @@ function compactedLabel(ev: CompactedEvent): string {
       return "animation_completed";
     case "window_focus_changed":
       return `window_focus_changed(${ev.focused ? "focused" : "unfocused"})`;
+    case "reminder_triggered":
+      return `reminder_triggered(${ev.message ?? ""})`;
   }
 }
 
@@ -88,7 +93,7 @@ function formatTime(millis: number): string {
 }
 
 function isDecidableEvent(ev: PetEvent): boolean {
-  return ev.type === "user_interaction" || ev.type === "window_focus_changed";
+  return ev.type === "user_interaction" || ev.type === "window_focus_changed" || ev.type === "reminder_triggered";
 }
 
 export function usePetEvents(petSettings: {
@@ -99,6 +104,8 @@ export function usePetEvents(petSettings: {
   llmApiKey: Ref<string>;
   llmModel: Ref<string>;
   tickerInterval: Ref<number>;
+  proactiveIntervalMs: Ref<number>;
+  minSilenceMs: Ref<number>;
   getAnimationState: () => AnimationState;
   getLastInteractionAt: () => number;
   onDecision: (result: AgentResult) => void;
@@ -107,6 +114,15 @@ export function usePetEvents(petSettings: {
   let inFlight = false;
   let debounceTimer: number | null = null;
   const queueLength = ref(0);
+  let consecutiveStays = 0;
+  let lastAgentCallAt = 0;
+
+  function shouldProactiveFlush(): boolean {
+    const now = Date.now();
+    const sinceLastAgentCall = now - lastAgentCallAt;
+    const sinceLastInteraction = now - petSettings.getLastInteractionAt();
+    return lastAgentCallAt > 0 && sinceLastAgentCall >= petSettings.proactiveIntervalMs.value && sinceLastInteraction >= petSettings.minSilenceMs.value;
+  }
 
   function pushEvent(event: PetEvent) {
     queue.push(event);
@@ -116,28 +132,27 @@ export function usePetEvents(petSettings: {
       // TimerTick: only flush if there are decidable events in the queue.
       if (queue.some(isDecidableEvent)) {
         flush();
+      } else if (shouldProactiveFlush()) {
+        flush(true);
       } else {
         // No decidable events — drain timer_tick to prevent queue growth.
         for (let i = queue.length - 1; i >= 0; i--) {
-          if (queue[i].type === "timer_tick") {
-            queue.splice(i, 1);
-          }
+          if (queue[i].type === "timer_tick") queue.splice(i, 1);
         }
         queueLength.value = queue.length;
       }
+    } else if (event.type === "reminder_triggered") {
+      flush(); // 提醒立即触发
     } else {
-      // Non-timer events: debounce 2s.
-      if (debounceTimer !== null) {
-        clearTimeout(debounceTimer);
-      }
-      debounceTimer = window.setTimeout(() => {
-        debounceTimer = null;
-        flush();
-      }, 2000);
+      // user_interaction / window_focus_changed
+      if (consecutiveStays >= 4) return; // 退避中
+      const debounceMs = consecutiveStays >= 2 ? 10000 : 2000;
+      if (debounceTimer !== null) clearTimeout(debounceTimer);
+      debounceTimer = window.setTimeout(() => { debounceTimer = null; flush(); }, debounceMs);
     }
   }
 
-  async function flush() {
+  async function flush(isProactive = false) {
     if (inFlight) return;
     if (queue.length === 0) return;
 
@@ -149,8 +164,8 @@ export function usePetEvents(petSettings: {
       // Step 1: filter out animation_completed.
       const filtered = batch.filter((e) => e.type !== "animation_completed");
 
-      // Step 2: if no decidable events remain, skip LLM call.
-      if (!filtered.some(isDecidableEvent)) {
+      // Step 2: if no decidable events remain, skip LLM call (unless proactive).
+      if (!filtered.some(isDecidableEvent) && !isProactive) {
         return;
       }
 
@@ -163,7 +178,7 @@ export function usePetEvents(petSettings: {
         if (ce.type === "user_interaction") {
           return {
             type: "user_interaction" as const,
-            interaction: (ce.interaction ?? "click") as "click" | "drag_end" | "double_click",
+            interaction: (ce.interaction ?? "click") as "click" | "drag_end" | "double_click" | "chat",
             timestamp: ce.timestamp,
           };
         }
@@ -171,6 +186,13 @@ export function usePetEvents(petSettings: {
           return {
             type: "window_focus_changed" as const,
             focused: ce.focused ?? true,
+            timestamp: ce.timestamp,
+          };
+        }
+        if (ce.type === "reminder_triggered") {
+          return {
+            type: "reminder_triggered" as const,
+            message: ce.message ?? "",
             timestamp: ce.timestamp,
           };
         }
@@ -199,6 +221,12 @@ export function usePetEvents(petSettings: {
         events: eventsForAgent,
         context: ctx,
       });
+      if (result.decision.action === "stay") {
+        consecutiveStays++;
+      } else {
+        consecutiveStays = 0;
+      }
+      lastAgentCallAt = Date.now();
       petSettings.onDecision(result);
     } catch (e) {
       console.error("[PetAgent] agent_decide failed:", e);

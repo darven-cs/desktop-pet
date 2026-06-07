@@ -5,6 +5,8 @@ export interface PetSettings {
   petPersonality: string;
   petName: string;
   tickerIntervalMs: number;
+  proactiveIntervalMs: number;
+  minSilenceMs: number;
   apiEndpoint: string;
   apiKey: string;
   model: string;
@@ -17,6 +19,8 @@ const defaults: PetSettings = {
   petPersonality: "",
   petName: "",
   tickerIntervalMs: 30000,
+  proactiveIntervalMs: 300000,
+  minSilenceMs: 120000,
   apiEndpoint: "",
   apiKey: "",
   model: "gpt-4o-mini",

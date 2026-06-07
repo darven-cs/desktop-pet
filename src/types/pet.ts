@@ -2,7 +2,18 @@
 // Keep these in sync when Rust structs change. 02 spec will switch to
 // ts-rs for auto-generation.
 
-export type AnimationId = "touch_nose" | "think" | "poop";
+export type AnimationId =
+  | "touch_nose"
+  | "think"
+  | "poop"
+  | "shush"
+  | "thumbs_up"
+  | "nervous"
+  | "sleep"
+  | "peek"
+  | "knead"
+  | "heartbeat"
+  | "cloud";
 
 export interface AnimationEntry {
   id: AnimationId;
@@ -29,13 +40,15 @@ export type Decision =
   | { action: "speak"; message: string; animation?: string }
   | { action: "enter_idle" }
   | { action: "exit_idle" }
-  | { action: "wait"; durationMs: number; reason?: string };
+  | { action: "wait"; durationMs: number; reason?: string }
+  | { action: "set_reminder"; message: string; delaySeconds: number };
 
 export type PetEvent =
   | { type: "timer_tick"; timestamp: number }
-  | { type: "user_interaction"; interaction: "click" | "drag_end" | "double_click"; timestamp: number }
+  | { type: "user_interaction"; interaction: "click" | "drag_end" | "double_click" | "chat"; timestamp: number }
   | { type: "animation_completed"; animationId: string; timestamp: number }
-  | { type: "window_focus_changed"; focused: boolean; timestamp: number };
+  | { type: "window_focus_changed"; focused: boolean; timestamp: number }
+  | { type: "reminder_triggered"; message: string; timestamp: number };
 
 export interface AgentResult {
   decision: Decision;

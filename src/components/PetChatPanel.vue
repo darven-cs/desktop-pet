@@ -12,6 +12,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: [];
   switchAnimation: [id: AnimationId];
+  chatSent: [];
 }>();
 
 const { messages, isLoading, error, sendMessage } = usePetChat();
@@ -69,6 +70,7 @@ async function onSend() {
   const text = inputText.value.trim();
   if (!text || isLoading.value) return;
   inputText.value = "";
+  emit("chatSent");
 
   const resp = await sendMessage(text);
   if (resp?.animation) {

@@ -26,6 +26,7 @@ impl ToolRegistry {
         registry.register(switch_animation_tool());
         registry.register(speak_to_user_tool());
         registry.register(wait_tool());
+        registry.register(set_reminder_tool());
         registry
     }
 
@@ -104,13 +105,13 @@ fn get_current_time_tool() -> ToolDef {
 fn switch_animation_tool() -> ToolDef {
     ToolDef {
         name: "switch_animation",
-        description: "切换宠物的动画。先查询时间再根据情境选择合适的动画，深夜选安静的动作（think/touch_nose），白天可以活泼一些",
+        description: "切换宠物的动画。先查询时间再根据情境选择合适的动画，深夜选安静的动作（think/touch_nose/cloud），白天可以活泼一些（heartbeat/thumbs_up/peek）",
         parameters: serde_json::json!({
             "type": "object",
             "properties": {
                 "to": {
                     "type": "string",
-                    "enum": ["touch_nose", "think", "poop"],
+                    "enum": ["touch_nose", "think", "poop", "shush", "thumbs_up", "nervous", "sleep", "peek", "knead", "heartbeat", "cloud"],
                     "description": "要切换到的动画 ID"
                 },
                 "reason": {
@@ -146,7 +147,7 @@ fn speak_to_user_tool() -> ToolDef {
                 },
                 "animation": {
                     "type": "string",
-                    "enum": ["touch_nose", "think", "poop"],
+                    "enum": ["touch_nose", "think", "poop", "shush", "thumbs_up", "nervous", "sleep", "peek", "knead", "heartbeat", "cloud"],
                     "description": "可选的伴随动画 ID"
                 }
             },
@@ -180,6 +181,29 @@ fn wait_tool() -> ToolDef {
             let clamped = secs.clamp(10, 600);
             let reason = args["reason"].as_str().map(String::from);
             let decision = Decision::Wait { duration_ms: (clamped * 1000) as u32, reason };
+            serde_json::to_string(&decision).map_err(|e| e.to_string())
+        },
+    }
+}
+
+fn set_reminder_tool() -> ToolDef {
+    ToolDef {
+        name: "set_reminder",
+        description: "设置一条定时提醒。到时间后你会主动提醒用户。用于用户让你'N分钟后提醒我X'的场景",
+        parameters: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "message": { "type": "string", "description": "提醒的内容" },
+                "delay_seconds": { "type": "number", "description": "多少秒后提醒(10-3600)", "minimum": 10, "maximum": 3600 }
+            },
+            "required": ["message", "delay_seconds"]
+        }),
+        is_terminal: true,
+        handler: |args| {
+            let message = args["message"].as_str().unwrap_or("").to_string();
+            let secs = args["delay_seconds"].as_u64().unwrap_or(60);
+            let clamped = secs.clamp(10, 3600) as u32;
+            let decision = Decision::SetReminder { message, delay_seconds: clamped };
             serde_json::to_string(&decision).map_err(|e| e.to_string())
         },
     }

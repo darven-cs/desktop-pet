@@ -164,6 +164,9 @@ async fn agent_decide(
             Decision::Wait { duration_ms, reason } => {
                 format!("wait {}ms (reason: {})", duration_ms, reason.as_deref().unwrap_or("?"))
             }
+            Decision::SetReminder { message, delay_seconds } => {
+                format!("set_reminder(agent): {} ({}s后)", message, delay_seconds)
+            }
         };
         mgr.record(memory::types::MemoryKind::Decision, content, 0.3);
     }

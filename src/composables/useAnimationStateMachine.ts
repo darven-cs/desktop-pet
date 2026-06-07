@@ -93,6 +93,14 @@ function formatStateChange(
   return `[PetState] ${from.phase} → ${to.phase}, current: ${to.current}, by: ${eventSource(event)}`;
 }
 
+interface PendingReminder {
+  message: string;
+  triggerAt: number;
+  timerId: number;
+}
+
+const MAX_REMINDERS = 5;
+
 export function useAnimationStateMachine(petSettings?: {
   llmEnabled: Ref<boolean>;
   petPersonality: Ref<string>;
@@ -104,6 +112,8 @@ export function useAnimationStateMachine(petSettings?: {
   onSpeak?: (message: string, animation: string | null) => void;
   /** If provided, ticker ticks call this instead of the old decider. */
   onTickerTick?: () => void;
+  /** If provided, set_reminder decision uses this to push reminder_triggered events. */
+  onPushEvent?: (event: import("../types/pet").PetEvent) => void;
 }) {
   // Spec §3.3: phase 初始 'playing', current 初始 'touch_nose'.
   const state: Ref<AnimationState> = ref({
@@ -137,6 +147,8 @@ export function useAnimationStateMachine(petSettings?: {
 
   const decider: Decider = getDefaultDecider();
   let waitTimeoutId: number | null = null;
+  const reminders: PendingReminder[] = [];
+  const isWaitingRef = ref(false);
 
   function dispatch(event: StateEvent) {
     if (eventSource(event) === "dispatch") {
@@ -243,9 +255,11 @@ export function useAnimationStateMachine(petSettings?: {
         lastTickerReason.value =
           decision.reason ?? `等待 ${Math.round(durationMs / 1000)}s`;
         petSettings?.onDecision?.(decision.reason ?? null);
+        isWaitingRef.value = true;
         stopTicker();
         waitTimeoutId = window.setTimeout(() => {
           waitTimeoutId = null;
+          isWaitingRef.value = false;
           startTicker();
           // 可以在这里触发一个 timer_tick 事件立即决策
           console.log(
@@ -254,11 +268,40 @@ export function useAnimationStateMachine(petSettings?: {
         }, durationMs);
         break;
       }
+      case "set_reminder": {
+        const { message, delaySeconds } = decision;
+        const triggerAt = Date.now() + delaySeconds * 1000;
+        const timerId = window.setTimeout(() => {
+          const idx = reminders.findIndex(r => r.timerId === timerId);
+          if (idx >= 0) reminders.splice(idx, 1);
+          petSettings?.onPushEvent?.({ type: "reminder_triggered", message, timestamp: Date.now() });
+          console.log(`[PetReminder] fired: "${message}"`);
+        }, delaySeconds * 1000);
+
+        while (reminders.length >= MAX_REMINDERS) {
+          const oldest = reminders.shift()!;
+          clearTimeout(oldest.timerId);
+          console.log("[PetReminder] dropped oldest reminder:", oldest.message);
+        }
+
+        reminders.push({ message, triggerAt, timerId });
+        console.log(`[PetReminder] set: "${message}" in ${delaySeconds}s`);
+        break;
+      }
     }
   }
 
   function applyAgentResult(result: AgentResult) {
     applyDecision(result.decision);
+  }
+
+  function interruptWait() {
+    if (waitTimeoutId !== null) {
+      clearTimeout(waitTimeoutId);
+      waitTimeoutId = null;
+    }
+    isWaitingRef.value = false;
+    startTicker();
   }
 
   function startTicker() {
@@ -302,5 +345,7 @@ export function useAnimationStateMachine(petSettings?: {
     startTicker,
     stopTicker,
     applyAgentResult,
+    isWaiting: readonly(isWaitingRef),
+    interruptWait,
   };
 }

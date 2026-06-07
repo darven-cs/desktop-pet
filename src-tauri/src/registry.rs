@@ -20,6 +20,14 @@ fn known_meta() -> HashMap<&'static str, AnimationMeta> {
     m.insert("touch_nose", AnimationMeta { fps: 25, loop_mode: LoopMode::Infinite });
     m.insert("think", AnimationMeta { fps: 25, loop_mode: LoopMode::Infinite });
     m.insert("poop", AnimationMeta { fps: 25, loop_mode: LoopMode::Once });
+    m.insert("shush", AnimationMeta { fps: 50, loop_mode: LoopMode::Once });
+    m.insert("thumbs_up", AnimationMeta { fps: 20, loop_mode: LoopMode::Once });
+    m.insert("nervous", AnimationMeta { fps: 25, loop_mode: LoopMode::Infinite });
+    m.insert("sleep", AnimationMeta { fps: 25, loop_mode: LoopMode::Infinite });
+    m.insert("peek", AnimationMeta { fps: 20, loop_mode: LoopMode::Infinite });
+    m.insert("knead", AnimationMeta { fps: 25, loop_mode: LoopMode::Infinite });
+    m.insert("heartbeat", AnimationMeta { fps: 25, loop_mode: LoopMode::Infinite });
+    m.insert("cloud", AnimationMeta { fps: 25, loop_mode: LoopMode::Infinite });
     m
 }
 

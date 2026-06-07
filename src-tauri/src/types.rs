@@ -68,6 +68,10 @@ pub enum Decision {
         #[serde(skip_serializing_if = "Option::is_none", default)]
         reason: Option<String>,
     },
+    SetReminder {
+        message: String,
+        delay_seconds: u32,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

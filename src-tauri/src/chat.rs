@@ -32,13 +32,13 @@ fn build_chat_system_prompt(
 请自然地回复用户。你可以：
 - 用可爱的语气聊天（简短，3句话以内）
 - 分享你观察到的事情（如果有记忆上下文的话）
-- 偶尔建议切换动画来表达情绪（touch_nose/think/poop）
+- 偶尔建议切换动画来表达情绪（touch_nose/think/poop/shush/thumbs_up/nervous/sleep/peek/knead/heartbeat/cloud）
 - 回答时间类问题时，先调用 get_current_time 工具，再基于准确时间回复
 
 最终你必须返回一个 JSON 对象，格式如下：
 {{"message": "回复内容", "animation": null}}
 
-animation 字段为 null 或动画 ID（touch_nose/think/poop）。不要返回任何其他文字。"#,
+animation 字段为 null 或动画 ID（touch_nose/think/poop/shush/thumbs_up/nervous/sleep/peek/knead/heartbeat/cloud）。不要返回任何其他文字。"#,
         identity, personality_text, memory_context
     )
 }

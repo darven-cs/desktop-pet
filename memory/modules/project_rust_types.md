@@ -66,3 +66,5 @@ fn known_meta() -> HashMap<&'static str, AnimationMeta> {
 - 2026-06-07：02 spec。`DecisionContext` 新增 4 个可选字段（time_of_day / recent_history / llm_enabled / pet_personality）；新增 `LlmInfo` + `LlmConfigUpdate` 类型；`decider.rs` 从 stub 改为 LLM 调用
 - 2026-06-07：Chat + Memory。新增 `memory/` 模块（types / short_term / long_term / retrieval / digest / mod.rs）+ `chat.rs`；新增 `MemoryEntry` `MemoryKind` `ChatMessage` `ChatResponse` 类型；`lib.rs` 新增 5 个 command（send_message / get_chat_history / get_memories / record_interaction / read_clipboard）；`decider.rs` 注入记忆上下文 + Tauri State；+ chrono + uuid 依赖
 - 2026-06-07（同日二轮）：`DecisionContext` 新增 `pet_name: Option<String>` + `memory_context: Option<String>`（#[serde(skip_deserializing)]）；`Decision::Speak` 变体已存在于上一轮（message + animation）；新增工具系统 `tools.rs`（ToolRegistry / ToolDef + is_terminal + info_schema）
+- 2026-06-07（spec05）：`Decision` 新增 `SetReminder { message, delay_seconds }` 变体
+- 2026-06-07：动画扩展。`registry.rs` 的 `known_meta()` 加入 8 条新动画元数据（shush/thumbs_up/nervous/sleep/peek/knead/heartbeat/cloud）；loop_mode 按语义：手势类（shush/thumbs_up）=Once，状态类=Infinite；fps 取自 gif-to-sheet 脚本输出

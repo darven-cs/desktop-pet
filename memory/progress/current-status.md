@@ -1,13 +1,13 @@
 # 当前状态
 
-**更新时间**：2026-06-07 23:30
+**更新时间**：2026-06-07 13:30
 
 ---
 
 ## 正在做
 
-- **任务**：Memory Fix + ReAct + Pet Name 实现完成，cargo build + vue-tsc 通过
-- **下一动作**：用户跑 `npm run tauri dev` 验收
+- **任务**：新增 8 个动画（shush/thumbs_up/nervous/sleep/peek/knead/heartbeat/cloud）+ 移除右键菜单"手动切动画"子菜单；cargo check + vue-tsc 通过
+- **下一动作**：用户跑 `npm run tauri dev` 验收新动画 + 检查右键菜单
 
 ## 下一步
 

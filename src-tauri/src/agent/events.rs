@@ -7,6 +7,7 @@ pub enum PetEvent {
     UserInteraction { interaction: String, timestamp: u64 },
     AnimationCompleted { animation_id: String, timestamp: u64 },
     WindowFocusChanged { focused: bool, timestamp: u64 },
+    ReminderTriggered { message: String, timestamp: u64 },
 }
 
 /// Format a slice of PetEvents into a natural-language summary suitable for the LLM prompt.
@@ -30,6 +31,7 @@ impl PetEvent {
             PetEvent::UserInteraction { timestamp, .. } => *timestamp,
             PetEvent::AnimationCompleted { timestamp, .. } => *timestamp,
             PetEvent::WindowFocusChanged { timestamp, .. } => *timestamp,
+            PetEvent::ReminderTriggered { timestamp, .. } => *timestamp,
         }
     }
 
@@ -42,6 +44,9 @@ impl PetEvent {
             }
             PetEvent::WindowFocusChanged { focused, .. } => {
                 format!("window_focus_changed({})", if *focused { "focused" } else { "unfocused" })
+            }
+            PetEvent::ReminderTriggered { message, .. } => {
+                format!("reminder_triggered({})", message)
             }
         }
     }

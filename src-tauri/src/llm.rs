@@ -20,6 +20,18 @@ const DEFAULT_SYSTEM_PROMPT: &str = r#"你是一只可爱的桌面宠物。你�
 1. **get_current_time** — 查询当前精确时间（信息工具，查完后可以继续调用其他工具）
 2. **switch_animation** — 切换动画到 touch_nose/think/poop，需要给出原因
 3. **speak_to_user** — 主动弹出对话框对用户说话，可以附带动画
+4. **wait** — 让自己安静一段时间，不做任何动作。用于觉得该休息了、深夜不想打扰用户等场景
+
+## 事件
+
+你的上下文中可能包含最近发生的事件列表，帮助你了解发生了什么：
+
+- **timer_tick** — 定时器触发（每次 tick 都会产生）
+- **user_interaction** — 用户与宠物互动（点击、拖拽等）
+- **animation_completed** — 一个动画播放完毕
+- **window_focus_changed** — 窗口获得或失去焦点
+
+请根据这些事件的模式（如用户频繁互动、长时间无互动、动画刚播完等）做出更聪明的决策。
 
 ## 决策规则
 
@@ -31,12 +43,16 @@ const DEFAULT_SYSTEM_PROMPT: &str = r#"你是一只可爱的桌面宠物。你�
 6. 让用户感到这只宠物有性格、不可预测但又可爱
 7. 深夜时如果要说话，语气温柔关心；白天可以活泼一些
 8. **重要**：如果在记忆上下文中看到最近的对话或事件，请基于这些记忆做决策。比如用户说过什么、你之前做了什么——这让你看起来有记忆、有个性
+9. 如果连续收到大量 timer_tick 事件且没有用户互动，说明用户在忙，考虑用 wait 安静一会儿
+10. 收到 user_interaction 事件时，优先做出回应（说话或做动作），让用户感受到互动
+11. 深夜（23:00-07:00）如果没有用户互动，用 wait 安静下来，不要频繁切换动画
 
 ## 典型决策流程
 
 - 想切动画 → 先调 get_current_time 查时间 → 再调 switch_animation
 - 想主动说话 → 先调 get_current_time 查时间 → 再调 speak_to_user
 - 想安静不动 → 直接调 switch_animation(to="touch_nose", reason="保持安静")
+- 想休息一会儿 → 调 wait(duration_seconds=60, reason="想打个盹")
 
 不要返回文字，直接调用工具。"#;
 
@@ -226,13 +242,16 @@ pub fn timeout_ms(ticker_interval_ms: u32) -> u64 {
 }
 
 /// Send chat request with tool support. The LLM may call tools; Rust executes
-/// them and feeds results back for a final decision (max 2 round-trips).
+/// them and feeds results back for a final decision.
 /// Runtime overrides (endpoint, api_key, model) from DecisionContext take
 /// precedence over static env config.
-pub async fn send_chat_request(
+/// `max_steps` controls how many LLM round-trips are allowed (default 2 for
+/// the legacy decide flow, higher for the agent loop).
+pub async fn send_chat_request_with_steps(
     config: &LlmStaticConfig,
     ctx: &DecisionContext,
     tools: &crate::tools::ToolRegistry,
+    max_steps: u32,
 ) -> Result<Decision, LlmError> {
     let llm_enabled = ctx.llm_enabled.unwrap_or(true);
     if !llm_enabled {
@@ -278,7 +297,6 @@ pub async fn send_chat_request(
         .build()
         .map_err(|e| LlmError::Network(e.to_string()))?;
 
-    // Round 1: send with tools, allowing the LLM to call tools.
     let tools_schema = tools.schema();
     let mut messages: Vec<serde_json::Value> = vec![
         serde_json::json!({ "role": "system", "content": system_prompt }),
@@ -286,76 +304,16 @@ pub async fn send_chat_request(
     ];
 
     eprintln!(
-        "[PetLLM] request to {}, model={}, key={}, tokens={}, tools={}",
-        endpoint, model, masked_key, config.max_tokens, tools_schema.len()
+        "[PetLLM] request to {}, model={}, key={}, tokens={}, tools={}, max_steps={}",
+        endpoint, model, masked_key, config.max_tokens, tools_schema.len(), max_steps
     );
 
-    let mut body = serde_json::json!({
-        "model": model,
-        "temperature": config.temperature,
-        "max_tokens": config.max_tokens,
-        "messages": messages,
-        "tools": tools_schema,
-    });
+    let mut steps = 0u32;
 
-    let resp_body = do_http_request(&client, &endpoint, &api_key, &body).await?;
-    let root: serde_json::Value =
-        serde_json::from_str(&resp_body).map_err(|e| LlmError::Parse(e.to_string()))?;
+    while steps < max_steps {
+        steps += 1;
 
-    let choice = &root["choices"][0];
-    let msg = &choice["message"];
-
-    // Process tool calls.
-    if let Some(tool_calls) = msg["tool_calls"].as_array() {
-        if tool_calls.is_empty() {
-            return parse_decision_from_message(msg);
-        }
-
-        eprintln!("[PetLLM] tool calls: {}", tool_calls.len());
-
-        // Append assistant message with tool_calls.
-        messages.push(msg.clone());
-
-        let mut terminal_decision: Option<Decision> = None;
-
-        for tc in tool_calls {
-            let call_id = tc["id"].as_str().unwrap_or("?");
-            let fn_name = tc["function"]["name"].as_str().unwrap_or("?");
-            let args_str = tc["function"]["arguments"].as_str().unwrap_or("{}");
-            let args: serde_json::Value =
-                serde_json::from_str(args_str).unwrap_or(serde_json::Value::Null);
-
-            eprintln!("[PetLLM] tool call: {}({})", fn_name, args_str);
-
-            let result = tools.execute(fn_name, &args).unwrap_or_else(|e| e);
-            eprintln!("[PetLLM] tool result: {}", result);
-
-            if tools.is_terminal(fn_name) {
-                // Terminal tool → parse as Decision and return immediately.
-                let decision: Decision = serde_json::from_str(&result)
-                    .map_err(|e| LlmError::Parse(format!("terminal tool parse: {} | raw='{}'", e, result)))?;
-                terminal_decision = Some(decision);
-                break; // Don't process further tools after terminal.
-            }
-
-            messages.push(serde_json::json!({
-                "role": "tool",
-                "tool_call_id": call_id,
-                "content": result,
-            }));
-        }
-
-        // If a terminal tool produced a decision, return it.
-        if let Some(decision) = terminal_decision {
-            eprintln!(
-                "[PetLLM] response: {}",
-                serde_json::to_string(&decision).unwrap_or_default()
-            );
-            return Ok(decision);
-        }
-
-        // Round 2: non-terminal tools completed, ask LLM for final decision.
-        body = serde_json::json!({
+        let body = serde_json::json!({
             "model": model,
             "temperature": config.temperature,
             "max_tokens": config.max_tokens,
@@ -363,46 +321,85 @@ pub async fn send_chat_request(
             "tools": tools_schema,
         });
 
-        let resp_body2 = do_http_request(&client, &endpoint, &api_key, &body).await?;
-        let root2: serde_json::Value =
-            serde_json::from_str(&resp_body2).map_err(|e| LlmError::Parse(e.to_string()))?;
-        let msg2 = &root2["choices"][0]["message"];
+        let resp_body = do_http_request(&client, &endpoint, &api_key, &body).await?;
+        let root: serde_json::Value =
+            serde_json::from_str(&resp_body).map_err(|e| LlmError::Parse(e.to_string()))?;
 
-        // Round 2 may also have tool calls (e.g. get_current_time → switch_animation).
-        if let Some(tool_calls2) = msg2["tool_calls"].as_array() {
-            if !tool_calls2.is_empty() {
-                for tc in tool_calls2 {
-                    let fn_name = tc["function"]["name"].as_str().unwrap_or("?");
-                    let args_str = tc["function"]["arguments"].as_str().unwrap_or("{}");
-                    let args: serde_json::Value =
-                        serde_json::from_str(args_str).unwrap_or(serde_json::Value::Null);
-                    eprintln!("[PetLLM] tool call (r2): {}({})", fn_name, args_str);
-                    let result = tools.execute(fn_name, &args).unwrap_or_else(|e| e);
-                    eprintln!("[PetLLM] tool result (r2): {}", result);
-                    if tools.is_terminal(fn_name) {
-                        let decision: Decision = serde_json::from_str(&result)
-                            .map_err(|e| LlmError::Parse(format!("r2 terminal parse: {} | raw='{}'", e, result)))?;
-                        eprintln!(
-                            "[PetLLM] response: {}",
-                            serde_json::to_string(&decision).unwrap_or_default()
-                        );
-                        return Ok(decision);
-                    }
-                }
+        let msg = &root["choices"][0]["message"];
+
+        // Process tool calls.
+        if let Some(tool_calls) = msg["tool_calls"].as_array() {
+            if tool_calls.is_empty() {
+                return parse_decision_from_message(msg);
             }
-        }
 
-        let decision = parse_decision_from_message(msg2)?;
-        eprintln!(
-            "[PetLLM] response: {}",
-            serde_json::to_string(&decision).unwrap_or_default()
-        );
-        return Ok(decision);
+            eprintln!(
+                "[PetLLM] tool calls (step {}): {}",
+                steps,
+                tool_calls.len()
+            );
+
+            // Append assistant message with tool_calls.
+            messages.push(msg.clone());
+
+            for tc in tool_calls {
+                let call_id = tc["id"].as_str().unwrap_or("?");
+                let fn_name = tc["function"]["name"].as_str().unwrap_or("?");
+                let args_str = tc["function"]["arguments"].as_str().unwrap_or("{}");
+                let args: serde_json::Value =
+                    serde_json::from_str(args_str).unwrap_or(serde_json::Value::Null);
+
+                eprintln!("[PetLLM] tool call: {}({})", fn_name, args_str);
+
+                let result = tools.execute(fn_name, &args).unwrap_or_else(|e| e);
+                eprintln!("[PetLLM] tool result: {}", result);
+
+                if tools.is_terminal(fn_name) {
+                    // Terminal tool -> parse as Decision and return immediately.
+                    let decision: Decision = serde_json::from_str(&result).map_err(|e| {
+                        LlmError::Parse(format!(
+                            "terminal tool parse: {} | raw='{}'",
+                            e, result
+                        ))
+                    })?;
+                    eprintln!(
+                        "[PetLLM] response: {}",
+                        serde_json::to_string(&decision).unwrap_or_default()
+                    );
+                    return Ok(decision);
+                }
+
+                // Non-terminal: feed result back and continue loop.
+                messages.push(serde_json::json!({
+                    "role": "tool",
+                    "tool_call_id": call_id,
+                    "content": result,
+                }));
+            }
+            // Continue the while loop — next iteration will send updated messages.
+        } else {
+            // No tool calls — try to parse decision from text.
+            let decision = parse_decision_from_message(msg)?;
+            eprintln!(
+                "[PetLLM] response: {}",
+                serde_json::to_string(&decision).unwrap_or_default()
+            );
+            return Ok(decision);
+        }
     }
 
-    // No tool calls — shouldn't happen with the new prompt, but handle gracefully.
-    eprintln!("[PetLLM] no tool call, falling back to Stay");
+    // Max steps exhausted without a terminal decision.
+    eprintln!("[PetLLM] max steps ({}) exhausted, falling back to Stay", max_steps);
     Ok(Decision::Stay)
+}
+
+/// Backward-compatible wrapper: sends a chat request with the original 2-step budget.
+pub async fn send_chat_request(
+    config: &LlmStaticConfig,
+    ctx: &DecisionContext,
+    tools: &crate::tools::ToolRegistry,
+) -> Result<Decision, LlmError> {
+    send_chat_request_with_steps(config, ctx, tools, 2).await
 }
 
 pub(crate) async fn do_http_request(

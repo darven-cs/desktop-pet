@@ -59,6 +59,9 @@ pub async fn decide_next_state(
                     }
                     Decision::EnterIdle => "enter_idle".to_string(),
                     Decision::ExitIdle => "exit_idle".to_string(),
+                    Decision::Wait { duration_ms, reason } => {
+                        format!("wait {}ms (reason: {})", duration_ms, reason.as_deref().unwrap_or("?"))
+                    }
                 };
                 mgr.record(memory::types::MemoryKind::Decision, content, 0.3);
             }

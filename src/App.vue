@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { LogicalSize } from "@tauri-apps/api/dpi";
 import { useAnimationRegistry } from "./composables/useAnimationRegistry";
 import { useAnimationStateMachine } from "./composables/useAnimationStateMachine";
 import { useContextMenu, type MenuItem } from "./composables/useContextMenu";
 import { usePetSettings } from "./composables/usePetSettings";
-import type { AnimationEntry, AnimationId } from "./types/pet";
+import { usePetEvents } from "./composables/usePetEvents";
+import type { AnimationEntry, AnimationId, AgentResult } from "./types/pet";
 import PetStatusPanel from "./components/PetStatusPanel.vue";
 import PetSettingsPanel from "./components/PetSettingsPanel.vue";
 import PetChatPanel from "./components/PetChatPanel.vue";
@@ -36,7 +37,10 @@ const onSpeak = (message: string, animation: string | null) => {
   overlay.value = "chat";
 };
 
-const { state, dispatch, tickerInterval, lastTickerReason } =
+// Forward reference for pushEvent — resolved after usePetEvents is created.
+let pushEventFn: ((event: import("./types/pet").PetEvent) => void) | null = null;
+
+const { state, dispatch, tickerInterval, lastTickerReason, lastInteractionAt, applyAgentResult } =
   useAnimationStateMachine({
     llmEnabled: computed(() => settings.value.llmEnabled),
     petPersonality: computed(() => settings.value.petPersonality),
@@ -46,7 +50,30 @@ const { state, dispatch, tickerInterval, lastTickerReason } =
     llmModel: computed(() => settings.value.model),
     onDecision,
     onSpeak,
+    onTickerTick: () => {
+      pushEventFn?.({ type: "timer_tick", timestamp: Date.now() });
+    },
   });
+
+// --- Pet Events (Agent Loop) ---
+function onAgentDecision(result: AgentResult) {
+  console.log(`[PetAgent] decision: ${result.decision.action}, stepsUsed: ${result.stepsUsed}`);
+  applyAgentResult(result);
+}
+
+const { pushEvent } = usePetEvents({
+  llmEnabled: computed(() => settings.value.llmEnabled),
+  petPersonality: computed(() => settings.value.petPersonality),
+  petName: computed(() => settings.value.petName),
+  llmApiEndpoint: computed(() => settings.value.apiEndpoint),
+  llmApiKey: computed(() => settings.value.apiKey),
+  llmModel: computed(() => settings.value.model),
+  tickerInterval,
+  getAnimationState: () => state.value,
+  getLastInteractionAt: () => lastInteractionAt.value,
+  onDecision: onAgentDecision,
+});
+pushEventFn = pushEvent;
 
 const {
   isOpen: menuIsOpen,
@@ -92,6 +119,9 @@ function onPetMouseUp(e: MouseEvent) {
   if (dt < CLICK_MAX_MS && dx < CLICK_MAX_PX && dy < CLICK_MAX_PX) {
     // Short click — try reading clipboard for chat context.
     readClipboardAndOpenChat();
+  } else if (dx > CLICK_MAX_PX || dy > CLICK_MAX_PX) {
+    // Drag ended
+    onPetDragEnd();
   }
 }
 
@@ -240,7 +270,48 @@ onMounted(async () => {
   for (const entry of registry.value) {
     preload(entry.sheetPath).catch(() => {});
   }
+
+  // Window focus/blur events for Agent Loop
+  window.addEventListener("focus", onFocusChange);
+  window.addEventListener("blur", onFocusChange);
 });
+
+onUnmounted(() => {
+  window.removeEventListener("focus", onFocusChange);
+  window.removeEventListener("blur", onFocusChange);
+});
+
+function onFocusChange() {
+  const focused = document.hasFocus();
+  pushEvent({ type: "window_focus_changed", focused, timestamp: Date.now() });
+}
+
+function onSpriteAnimationEnd(_e: AnimationEvent) {
+  const entry = currentEntry.value;
+  if (entry && entry.loopMode === "once") {
+    pushEvent({
+      type: "animation_completed",
+      animationId: entry.id,
+      timestamp: Date.now(),
+    });
+  }
+}
+
+function onPetClick() {
+  pushEvent({
+    type: "user_interaction",
+    interaction: "click",
+    timestamp: Date.now(),
+  });
+}
+
+function onPetDragEnd() {
+  pushEvent({
+    type: "user_interaction",
+    interaction: "drag_end",
+    timestamp: Date.now(),
+  });
+}
 
 function onContextMenu(e: MouseEvent) {
   closeOverlay();
@@ -309,6 +380,7 @@ function onChatSwitchAnimation(id: AnimationId) {
     class="pet-area"
     @mousedown="onPetMouseDown"
     @mouseup="onPetMouseUp"
+    @click="onPetClick"
     @contextmenu.prevent="onContextMenu"
   >
     <!-- Pet sprite -->
@@ -318,6 +390,7 @@ function onChatSwitchAnimation(id: AnimationId) {
       class="pet-sprite"
       :style="spriteStyle"
       @mousedown="startDrag"
+      @animationend="onSpriteAnimationEnd"
     ></div>
 
     <!-- Overlay panels -->

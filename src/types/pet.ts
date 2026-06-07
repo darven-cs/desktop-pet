@@ -28,7 +28,20 @@ export type Decision =
   | { action: "switch"; to: AnimationId; reason?: string }
   | { action: "speak"; message: string; animation?: string }
   | { action: "enter_idle" }
-  | { action: "exit_idle" };
+  | { action: "exit_idle" }
+  | { action: "wait"; durationMs: number; reason?: string };
+
+export type PetEvent =
+  | { type: "timer_tick"; timestamp: number }
+  | { type: "user_interaction"; interaction: "click" | "drag_end" | "double_click"; timestamp: number }
+  | { type: "animation_completed"; animationId: string; timestamp: number }
+  | { type: "window_focus_changed"; focused: boolean; timestamp: number };
+
+export interface AgentResult {
+  decision: Decision;
+  stepsUsed: number;
+  toolCallsMade: string[];
+}
 
 export interface DecisionContext {
   currentState: AnimationState;
@@ -46,6 +59,8 @@ export interface DecisionContext {
   llmApiEndpoint?: string;
   llmApiKey?: string;
   llmModel?: string;
+  // 04: frontend-provided compacted events summary
+  eventsSummary?: string;
 }
 
 export type AppErrorCode =

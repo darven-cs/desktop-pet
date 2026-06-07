@@ -39,6 +39,8 @@ pub struct DecisionContext {
     pub llm_api_endpoint: Option<String>,
     pub llm_api_key: Option<String>,
     pub llm_model: Option<String>,
+    // 04: frontend-provided compacted events summary (overrides format_events_summary)
+    pub events_summary: Option<String>,
     // memory context injected by decider (not sent from frontend)
     #[serde(skip_deserializing, default)]
     pub memory_context: Option<String>,
@@ -61,6 +63,11 @@ pub enum Decision {
     },
     EnterIdle,
     ExitIdle,
+    Wait {
+        duration_ms: u32,
+        #[serde(skip_serializing_if = "Option::is_none", default)]
+        reason: Option<String>,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

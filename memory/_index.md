@@ -23,7 +23,7 @@
 | 精灵图管线 | [modules/project_sprite_pipeline.md](modules/project_sprite_pipeline.md) | 已上线 | 2026-06-06 | GIF → sprite sheet 的目录约定、命名映射、CSS steps 播放 |
 | 窗口拖拽 | [modules/project_window_drag.md](modules/project_window_drag.md) | 已上线 | 2026-06-06 | 鼠标左键按住拖动整个 Tauri 窗口 |
 | Rust 数据类型 | [modules/project_rust_types.md](modules/project_rust_types.md) | 已上线 | 2026-06-07 | types.rs 定义所有 serde 结构，前后端共用 R7 契约 |
-| 前端组合式 | [modules/project_frontend_composables.md](modules/project_frontend_composables.md) | 已上线 | 2026-06-07 | useAnimationRegistry / useAnimationStateMachine / useContextMenu / usePetSettings / usePetChat + decider/ |
+| 前端组合式 | [modules/project_frontend_composables.md](modules/project_frontend_composables.md) | 已上线 | 2026-06-07 | usePetEvents 已加事件合并+条件 flush+animation_completed 过滤；budget 收紧至 3 次/分、15s 间隔 |
 <!-- INDEX:MODULES:END -->
 
 ### 1.2 参考类记忆

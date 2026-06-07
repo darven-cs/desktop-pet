@@ -1,5 +1,6 @@
 import { ref, watch, readonly, type Ref } from "vue";
 import type {
+  AgentResult,
   AnimationEntry,
   AnimationId,
   AnimationState,
@@ -101,6 +102,8 @@ export function useAnimationStateMachine(petSettings?: {
   llmModel: Ref<string>;
   onDecision?: (reason: string | null) => void;
   onSpeak?: (message: string, animation: string | null) => void;
+  /** If provided, ticker ticks call this instead of the old decider. */
+  onTickerTick?: () => void;
 }) {
   // Spec §3.3: phase 初始 'playing', current 初始 'touch_nose'.
   const state: Ref<AnimationState> = ref({
@@ -133,6 +136,7 @@ export function useAnimationStateMachine(petSettings?: {
   let inFlight = false;
 
   const decider: Decider = getDefaultDecider();
+  let waitTimeoutId: number | null = null;
 
   function dispatch(event: StateEvent) {
     if (eventSource(event) === "dispatch") {
@@ -156,6 +160,14 @@ export function useAnimationStateMachine(petSettings?: {
       console.log("[PetTicker] skipped, phase=transitioning");
       return;
     }
+
+    // If agent loop is wired up, delegate to the event system.
+    if (petSettings?.onTickerTick) {
+      petSettings.onTickerTick();
+      return;
+    }
+
+    // Fallback: old decider path (backward compatibility).
     inFlight = true;
     try {
       const now = new Date();
@@ -226,7 +238,27 @@ export function useAnimationStateMachine(petSettings?: {
         lastTickerReason.value = decision.message;
         petSettings?.onSpeak?.(decision.message, decision.animation ?? null);
         break;
+      case "wait": {
+        const durationMs = decision.durationMs;
+        lastTickerReason.value =
+          decision.reason ?? `等待 ${Math.round(durationMs / 1000)}s`;
+        petSettings?.onDecision?.(decision.reason ?? null);
+        stopTicker();
+        waitTimeoutId = window.setTimeout(() => {
+          waitTimeoutId = null;
+          startTicker();
+          // 可以在这里触发一个 timer_tick 事件立即决策
+          console.log(
+            `[PetAgent] wait ended after ${durationMs}ms, resuming ticker`,
+          );
+        }, durationMs);
+        break;
+      }
     }
+  }
+
+  function applyAgentResult(result: AgentResult) {
+    applyDecision(result.decision);
   }
 
   function startTicker() {
@@ -238,6 +270,10 @@ export function useAnimationStateMachine(petSettings?: {
     if (intervalId !== null) {
       window.clearInterval(intervalId);
       intervalId = null;
+    }
+    if (waitTimeoutId !== null) {
+      window.clearTimeout(waitTimeoutId);
+      waitTimeoutId = null;
     }
   }
 
@@ -263,5 +299,8 @@ export function useAnimationStateMachine(petSettings?: {
     tickerInterval,
     lastInteractionAt,
     lastTickerReason,
+    startTicker,
+    stopTicker,
+    applyAgentResult,
   };
 }

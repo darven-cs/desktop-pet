@@ -25,6 +25,7 @@ impl ToolRegistry {
         registry.register(get_current_time_tool());
         registry.register(switch_animation_tool());
         registry.register(speak_to_user_tool());
+        registry.register(wait_tool());
         registry
     }
 
@@ -156,6 +157,29 @@ fn speak_to_user_tool() -> ToolDef {
             let message = args["message"].as_str().unwrap_or("").to_string();
             let animation = args["animation"].as_str().map(String::from);
             let decision = Decision::Speak { message, animation };
+            serde_json::to_string(&decision).map_err(|e| e.to_string())
+        },
+    }
+}
+
+fn wait_tool() -> ToolDef {
+    ToolDef {
+        name: "wait",
+        description: "让自己安静一段时间，不做任何动作。用于觉得该休息了、深夜不想打扰用户等场景",
+        parameters: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "duration_seconds": { "type": "number", "description": "想安静的秒数(10-600)", "minimum": 10, "maximum": 600 },
+                "reason": { "type": "string", "description": "安静的原因(简短)" }
+            },
+            "required": ["duration_seconds"]
+        }),
+        is_terminal: true,
+        handler: |args| {
+            let secs = args["duration_seconds"].as_u64().unwrap_or(60);
+            let clamped = secs.clamp(10, 600);
+            let reason = args["reason"].as_str().map(String::from);
+            let decision = Decision::Wait { duration_ms: (clamped * 1000) as u32, reason };
             serde_json::to_string(&decision).map_err(|e| e.to_string())
         },
     }

@@ -1,3 +1,4 @@
+mod agent;
 mod chat;
 mod decider;
 mod llm;
@@ -108,6 +109,82 @@ async fn decide_next_state(
             Err(e)
         }
     }
+}
+
+#[tauri::command]
+async fn agent_decide(
+    state: tauri::State<'_, Mutex<memory::MemoryManager>>,
+    events: Vec<agent::events::PetEvent>,
+    context: DecisionContext,
+) -> Result<agent::AgentResult, AppError> {
+    eprintln!(
+        "[PetCmd] agent_decide called with {} events",
+        events.len()
+    );
+
+    let static_cfg = llm::load_static_config();
+
+    // Check LLM enabled.
+    let llm_enabled = context.llm_enabled.unwrap_or(true);
+    if !llm_enabled || (!static_cfg.enabled && context.llm_api_key.as_deref().filter(|s| !s.is_empty()).is_none()) {
+        eprintln!("[PetAgent] LLM disabled, returning Stay");
+        return Ok(agent::AgentResult {
+            decision: Decision::Stay,
+            steps_used: 0,
+            tool_calls_made: vec![],
+        });
+    }
+
+    // Build memory context and inject into DecisionContext.
+    let mut ctx = context;
+    {
+        let mgr = state.lock().map_err(|e| AppError::internal(e.to_string()))?;
+        let mem_ctx = mgr.build_context();
+        ctx.memory_context = Some(mem_ctx);
+    }
+
+    let tools = tools::ToolRegistry::new();
+    let mut budget = agent::budget::AgentBudget::new();
+
+    let result = agent::run_agent_loop(&static_cfg, &ctx, &events, &tools, &mut budget)
+        .await?;
+
+    // Record decision in memory.
+    if let Ok(mut mgr) = state.lock() {
+        let content = match &result.decision {
+            Decision::Stay => "stay (agent)".to_string(),
+            Decision::Switch { to, reason } => {
+                format!("switch to {} (reason: {})", to, reason.as_deref().unwrap_or("?"))
+            }
+            Decision::Speak { message, .. } => {
+                format!("主动对话(agent): {}", message)
+            }
+            Decision::EnterIdle => "enter_idle (agent)".to_string(),
+            Decision::ExitIdle => "exit_idle (agent)".to_string(),
+            Decision::Wait { duration_ms, reason } => {
+                format!("wait {}ms (reason: {})", duration_ms, reason.as_deref().unwrap_or("?"))
+            }
+        };
+        mgr.record(memory::types::MemoryKind::Decision, content, 0.3);
+    }
+
+    // Validate animation id if switching.
+    if let Decision::Switch { ref to, .. } = result.decision {
+        if !registry::is_known_animation(to) {
+            eprintln!("[PetAgent] invalid animation id: {}, falling back to Stay", to);
+            return Ok(agent::AgentResult {
+                decision: Decision::Stay,
+                steps_used: result.steps_used,
+                tool_calls_made: result.tool_calls_made,
+            });
+        }
+    }
+
+    eprintln!(
+        "[PetAgent] result: decision={:?}, steps={}, tools={:?}",
+        result.decision, result.steps_used, result.tool_calls_made
+    );
+    Ok(result)
 }
 
 #[tauri::command]
@@ -274,6 +351,7 @@ pub fn run() {
             greet,
             list_animations,
             decide_next_state,
+            agent_decide,
             get_llm_info,
             update_llm_config,
             send_message,

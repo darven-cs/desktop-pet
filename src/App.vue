@@ -13,6 +13,7 @@ import PetStatusPanel from "./components/PetStatusPanel.vue";
 import PetSettingsPanel from "./components/PetSettingsPanel.vue";
 import PetChatPanel from "./components/PetChatPanel.vue";
 import PetMemoryPanel from "./components/PetMemoryPanel.vue";
+import PetTranslatePanel from "./components/PetTranslatePanel.vue";
 
 // --- Constants ---
 const OVERLAY_EST_W = 310;
@@ -78,13 +79,17 @@ const { pushEvent } = usePetEvents({
 });
 pushEventFn = pushEvent;
 
-const overlay = ref<"status" | "settings" | "chat" | "memory" | null>(null);
+const overlay = ref<"status" | "settings" | "chat" | "memory" | "translate" | null>(null);
 const chatContextText = ref<string | null>(null);
+const translateSelectedText = ref<string>("");
 
-function showOverlay(panel: "status" | "settings" | "chat" | "memory") {
+function showOverlay(panel: "status" | "settings" | "chat" | "memory" | "translate") {
   overlay.value = overlay.value === panel ? null : panel;
   if (panel !== "chat") {
     chatContextText.value = null;
+  }
+  if (panel !== "translate") {
+    translateSelectedText.value = "";
   }
 }
 
@@ -97,7 +102,9 @@ function closeOverlay() {
 // --- Native context menu (Tauri menu, not in-webview <div>) ---
 // Menu ids are defined in src-tauri/src/lib.rs::show_context_menu.
 const CTX_MENU_EVENT = "context-menu-click";
+const TRANSLATE_PANEL_EVENT = "translate-panel-toggle";
 let unlistenMenu: UnlistenFn | null = null;
+let unlistenTranslate: UnlistenFn | null = null;
 
 function handleMenuClick(id: string) {
   switch (id) {
@@ -292,6 +299,14 @@ onMounted(async () => {
   unlistenMenu = await listen<string>(CTX_MENU_EVENT, (e) => {
     handleMenuClick(e.payload);
   });
+
+  // Clipboard change listener for translate panel.
+  unlistenTranslate = await listen<string>(TRANSLATE_PANEL_EVENT, (e) => {
+    if (e.payload && e.payload.trim()) {
+      translateSelectedText.value = e.payload.trim();
+      overlay.value = "translate";
+    }
+  });
 });
 
 onUnmounted(() => {
@@ -299,6 +314,8 @@ onUnmounted(() => {
   window.removeEventListener("blur", onFocusChange);
   unlistenMenu?.();
   unlistenMenu = null;
+  unlistenTranslate?.();
+  unlistenTranslate = null;
 });
 
 function onFocusChange() {
@@ -402,6 +419,14 @@ function onChatMessageSent() {
       v-if="overlay === 'memory'"
       :sprite-height="spriteH"
       @close="closeOverlay"
+    />
+    <PetTranslatePanel
+      v-if="overlay === 'translate'"
+      :sprite-height="spriteH"
+      :selected-text="translateSelectedText"
+      @close="closeOverlay"
+      @switch-animation="onChatSwitchAnimation"
+      @chat-sent="onChatMessageSent"
     />
   </div>
 </template>

@@ -5,6 +5,7 @@ mod llm;
 mod memory;
 mod registry;
 mod tools;
+mod translate;
 mod types;
 
 use std::sync::Mutex;
@@ -13,6 +14,8 @@ use memory::types::{ChatMessage, MemoryEntry};
 use tauri::menu::{Menu, MenuItemBuilder, PredefinedMenuItem};
 use tauri::{AppHandle, Emitter, WebviewWindow};
 use types::{AppError, Decision, DecisionContext};
+
+const TRANSLATE_PANEL_EVENT: &str = "translate-panel-toggle";
 
 const CTX_MENU_EVENT: &str = "context-menu-click";
 
@@ -340,6 +343,36 @@ fn read_clipboard() -> Result<String, AppError> {
     Ok(text)
 }
 
+#[tauri::command]
+async fn translate_text(
+    text: String,
+    from_lang: Option<String>,
+    to_lang: Option<String>,
+    api_key: Option<String>,
+    endpoint: Option<String>,
+    model: Option<String>,
+) -> Result<String, AppError> {
+    eprintln!(
+        "[PetCmd] translate_text called with: text='{}', from={:?}, to={:?}",
+        if text.len() > 50 {
+            format!("{}...", text.chars().take(50).collect::<String>())
+        } else {
+            text.clone()
+        },
+        from_lang,
+        to_lang
+    );
+    translate::translate_text(
+        &text,
+        from_lang.as_deref(),
+        to_lang.as_deref(),
+        api_key.as_deref(),
+        endpoint.as_deref(),
+        model.as_deref(),
+    )
+    .await
+}
+
 /// Build the right-click context menu and show it as a native popup at the
 /// cursor position. Using Tauri native menu (instead of an in-webview <div>)
 /// avoids WebView2's Chromium-layer context menu flash on Windows.
@@ -385,7 +418,37 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+                .plugin(tauri_plugin_clipboard_manager::init())
         .manage(memory_manager)
+        .setup(|app| {
+            use tauri_plugin_clipboard_manager::ClipboardExt;
+
+            let app_handle = app.handle().clone();
+
+            // Start clipboard monitoring task
+            tauri::async_runtime::spawn(async move {
+                let mut last_clipboard = String::new();
+                loop {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(800)).await;
+                    if let Ok(text) = app_handle.clipboard().read_text() {
+                        let text = text.trim().to_string();
+                        if !text.is_empty() && text != last_clipboard {
+                            last_clipboard = text.clone();
+                            // Only trigger for reasonably short text (not huge clipboard content)
+                            if text.len() < 500 {
+                                eprintln!("[PetSys] clipboard changed, showing translate panel");
+                                if let Err(e) = app_handle.emit(TRANSLATE_PANEL_EVENT, text) {
+                                    eprintln!("[PetError] emit {TRANSLATE_PANEL_EVENT} failed: {e}");
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            eprintln!("[PetSys] clipboard monitor started");
+            Ok(())
+        })
         .on_menu_event(|app, event| {
             let id = event.id().0.clone();
             eprintln!("[PetMenu] click: {id}");
@@ -406,6 +469,7 @@ pub fn run() {
             record_interaction,
             read_clipboard,
             show_context_menu,
+            translate_text,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
